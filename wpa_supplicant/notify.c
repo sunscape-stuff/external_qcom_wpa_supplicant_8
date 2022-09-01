@@ -420,6 +420,10 @@ void wpas_notify_network_removed(struct wpa_supplicant *wpa_s,
 {
 	if (wpa_s->next_ssid == ssid)
 		wpa_s->next_ssid = NULL;
+	if (wpa_s->last_ssid == ssid)
+		wpa_s->last_ssid = NULL;
+	if (wpa_s->current_ssid == ssid)
+		wpa_s->current_ssid = NULL;
 	if (wpa_s->wpa)
 		wpa_sm_pmksa_cache_flush(wpa_s->wpa, ssid);
 	if (!ssid->p2p_group && wpa_s->global->p2p_group_formation != wpa_s &&
@@ -472,8 +476,6 @@ void wpas_notify_bss_freq_changed(struct wpa_supplicant *wpa_s,
 		return;
 
 	wpas_dbus_bss_signal_prop_changed(wpa_s, WPAS_DBUS_BSS_PROP_FREQ, id);
-
-	wpas_aidl_notify_bss_freq_changed(wpa_s);
 }
 
 
@@ -1320,4 +1322,12 @@ void wpas_notify_qos_policy_request(struct wpa_supplicant *wpa_s,
 		return;
 
 	wpas_aidl_notify_qos_policy_request(wpa_s, policies, num_policies);
+}
+
+void wpas_notify_frequency_changed(struct wpa_supplicant *wpa_s, int frequency)
+{
+	if (!wpa_s)
+		return;
+
+	wpas_aidl_notify_frequency_changed(wpa_s, frequency);
 }
