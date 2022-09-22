@@ -4743,6 +4743,7 @@ static int wpas_p2p_get_pref_freq_list(void *ctx, int go,
 
 int wpas_p2p_mac_setup(struct wpa_supplicant *wpa_s)
 {
+	int ret = 0;
 	u8 addr[ETH_ALEN] = {0};
 
 	if (wpa_s->conf->p2p_device_random_mac_addr == 0)
@@ -4780,16 +4781,20 @@ int wpas_p2p_mac_setup(struct wpa_supplicant *wpa_s)
 		wpa_msg(wpa_s, MSG_DEBUG, "Restore last used MAC address.");
 	}
 
-	if (wpa_drv_set_mac_addr(wpa_s, addr) < 0) {
+	ret = wpa_drv_set_mac_addr(wpa_s, addr);
+
+	if (ret < 0) {
 		wpa_msg(wpa_s, MSG_INFO,
 			"Failed to set random MAC address");
-		return -EINVAL;
+		return ret;
 	}
 
-	if (wpa_supplicant_update_mac_addr(wpa_s) < 0) {
+	ret = wpa_supplicant_update_mac_addr(wpa_s);
+
+	if (ret < 0) {
 		wpa_msg(wpa_s, MSG_INFO,
 			"Could not update MAC address information");
-		return -EINVAL;
+		return ret;
 	}
 
 	wpa_msg(wpa_s, MSG_DEBUG, "Using random MAC address " MACSTR,
@@ -9739,9 +9744,12 @@ static int wpas_p2p_move_go_csa(struct wpa_supplicant *wpa_s)
 		goto out;
 	}
 
-	if (conf->hw_mode != wpa_s->ap_iface->current_mode->mode) {
-		wpa_dbg(wpa_s, MSG_DEBUG,
-			"P2P CSA: CSA to a different band is not supported");
+	if (conf->hw_mode != wpa_s->ap_iface->current_mode->mode &&
+	    (wpa_s->ap_iface->current_mode->mode != HOSTAPD_MODE_IEEE80211A ||
+	     conf->hw_mode != HOSTAPD_MODE_IEEE80211G)) {
+		wpa_dbg(wpa_s, MSG_INFO,
+			"P2P CSA: CSA from Hardware mode %d to %d is not supported",
+			wpa_s->ap_iface->current_mode->mode, conf->hw_mode);
 		ret = -1;
 		goto out;
 	}
