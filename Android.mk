@@ -1,5 +1,5 @@
 ifneq ($(TARGET_DEVICE),qssi)
-S_LOCAL_PATH:= $(call my-dir)
+S_LOCAL_PATH := $(call my-dir)
 
 ifneq ($(filter VER_0_8_X VER_2_1_DEVEL,$(WPA_SUPPLICANT_VERSION)),)
 # The order of the 2 Android.mks does matter!

@@ -298,13 +298,21 @@ static void wpa_supplicant_eapol_cb(struct eapol_sm *eapol,
 		EAPOL_SUPP_RESULT_EXPECTED_FAILURE;
 
 	if (result != EAPOL_SUPP_RESULT_SUCCESS) {
+		int timeout = 2;
 		/*
 		 * Make sure we do not get stuck here waiting for long EAPOL
 		 * timeout if the AP does not disconnect in case of
 		 * authentication failure.
 		 */
-		wpa_supplicant_req_auth_timeout(wpa_s, 2, 0);
+		if (wpa_s->eapol_failed) {
+			wpa_printf(MSG_DEBUG,
+				   "EAPOL authentication failed again and AP did not disconnect us");
+			timeout = 0;
+		}
+		wpa_s->eapol_failed = 1;
+		wpa_supplicant_req_auth_timeout(wpa_s, timeout, 0);
 	} else {
+		wpa_s->eapol_failed = 0;
 		ieee802_1x_notify_create_actor(wpa_s, wpa_s->last_eapol_src);
 	}
 
@@ -1175,6 +1183,16 @@ static void wpa_supplicant_open_ssl_failure_cb(void *ctx,
 
 	wpas_notify_open_ssl_failure(wpa_s, reason_string);
 }
+
+static bool wpas_encryption_required(void *ctx)
+{
+	struct wpa_supplicant *wpa_s = ctx;
+
+	return wpa_s->wpa &&
+		wpa_sm_has_ptk_installed(wpa_s->wpa) &&
+		wpa_sm_pmf_enabled(wpa_s->wpa);
+}
+
 #endif /* IEEE8021X_EAPOL */
 
 
@@ -1223,6 +1241,7 @@ int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s)
 	ctx->set_anon_id = wpa_supplicant_set_anon_id;
 	ctx->eap_method_selected_cb = wpa_supplicant_eap_method_selected_cb;
 	ctx->open_ssl_failure_cb = wpa_supplicant_open_ssl_failure_cb;
+	ctx->encryption_required = wpas_encryption_required;
 	ctx->cb_ctx = wpa_s;
 	wpa_s->eapol = eapol_sm_init(ctx);
 	if (wpa_s->eapol == NULL) {
@@ -1365,6 +1384,17 @@ static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
 		ssid->owe_only = 1;
 		changed = 1;
 	}
+
+#ifdef CONFIG_DRIVER_NL80211_BRCM
+	/* driver call for transition disable */
+	{
+		struct wpa_driver_associate_params params;
+
+		os_memset(&params, 0, sizeof(params));
+		params.td_policy = bitmap;
+		wpa_drv_update_connect_params(wpa_s, &params, WPA_DRV_UPDATE_TD_POLICY);
+	}
+#endif /* CONFIG_DRIVER_NL80211_BRCM */
 
 	wpas_notify_transition_disable(wpa_s, ssid, bitmap);
 

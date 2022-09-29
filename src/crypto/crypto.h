@@ -1086,16 +1086,20 @@ struct wpabuf * crypto_ec_key_get_pubkey_point(struct crypto_ec_key *key,
  * crypto_ec_key_get_public_key - Get EC public key as an EC point
  * @key: EC key from crypto_ec_key_parse/set_pub() or crypto_ec_key_parse_priv()
  * Returns: Public key as an EC point or %NULL on failure
+ *
+ * The caller needs to free the returned value with crypto_ec_point_deinit().
  */
-const struct crypto_ec_point *
+struct crypto_ec_point *
 crypto_ec_key_get_public_key(struct crypto_ec_key *key);
 
 /**
  * crypto_ec_key_get_private_key - Get EC private key as a bignum
  * @key: EC key from crypto_ec_key_parse/set_pub() or crypto_ec_key_parse_priv()
  * Returns: Private key as a bignum or %NULL on failure
+ *
+ * The caller needs to free the returned value with crypto_bignum_deinit().
  */
-const struct crypto_bignum *
+struct crypto_bignum *
 crypto_ec_key_get_private_key(struct crypto_ec_key *key);
 
 /**
@@ -1274,5 +1278,47 @@ const u8 * crypto_csr_get_attribute(struct crypto_csr *csr,
 struct wpabuf * crypto_csr_sign(struct crypto_csr *csr,
 				struct crypto_ec_key *key,
 				enum crypto_hash_alg algo);
+
+struct crypto_rsa_key;
+
+/**
+ * crypto_rsa_key_read - Read an RSA key
+ * @file: File from which to read (PEM encoded, can be X.509v3 certificate)
+ * @private_key: Whether to read the private key instead of public key
+ * Returns: RSA key or %NULL on failure
+ */
+struct crypto_rsa_key * crypto_rsa_key_read(const char *file, bool private_key);
+
+/**
+ * crypto_rsa_oaep_sha256_encrypt - RSA-OAEP-SHA-256 encryption
+ * @key: RSA key from crypto_rsa_key_read()
+ * @in: Plaintext input data
+ * Returns: Encrypted output data or %NULL on failure
+ */
+struct wpabuf * crypto_rsa_oaep_sha256_encrypt(struct crypto_rsa_key *key,
+					       const struct wpabuf *in);
+
+/**
+ * crypto_rsa_oaep_sha256_decrypt - RSA-OAEP-SHA-256 decryption
+ * @key: RSA key from crypto_rsa_key_read()
+ * @in: Encrypted input data
+ * Returns: Decrypted output data or %NULL on failure
+ */
+struct wpabuf * crypto_rsa_oaep_sha256_decrypt(struct crypto_rsa_key *key,
+					       const struct wpabuf *in);
+
+/**
+ * crypto_rsa_key_free - Free an RSA key
+ * @key: RSA key from crypto_rsa_key_read()
+ */
+void crypto_rsa_key_free(struct crypto_rsa_key *key);
+
+/**
+ * crypto_unload - Unload crypto resources
+ *
+ * This function is called just before the process exits to allow dynamic
+ * resource allocations to be freed.
+ */
+void crypto_unload(void);
 
 #endif /* CRYPTO_H */
