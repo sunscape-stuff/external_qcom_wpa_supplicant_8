@@ -2475,6 +2475,7 @@ int StaNetwork::setByteArrayKeyFieldAndResetState(
 void StaNetwork::setFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
 {
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	int res;
 	struct wpa_driver_capa capa;
 
@@ -2484,6 +2485,7 @@ void StaNetwork::setFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
 
 	if (key_mgmt_mask & WPA_KEY_MGMT_IEEE8021X) {
 		key_mgmt_mask |= WPA_KEY_MGMT_FT_IEEE8021X;
+		wpa_ssid->ft_eap_pmksa_caching = 1;
 	}
 
 	res = wpa_drv_get_capa(wpa_s, &capa);
@@ -2526,12 +2528,15 @@ void StaNetwork::setFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
  */
 void StaNetwork::resetFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
 {
+	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
+
 	if (key_mgmt_mask & WPA_KEY_MGMT_PSK) {
 		key_mgmt_mask &= ~WPA_KEY_MGMT_FT_PSK;
 	}
 
 	if (key_mgmt_mask & WPA_KEY_MGMT_IEEE8021X) {
 		key_mgmt_mask &= ~WPA_KEY_MGMT_FT_IEEE8021X;
+		wpa_ssid->ft_eap_pmksa_caching = 0;
 	}
 #ifdef CONFIG_IEEE80211R
 #ifdef CONFIG_SAE
