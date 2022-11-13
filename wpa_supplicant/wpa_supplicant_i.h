@@ -564,12 +564,14 @@ struct wpas_pasn {
 	int akmp;
 	int cipher;
 	u16 group;
+	bool secure_ltf;
 	int freq;
 	size_t kdk_len;
 
 	u8 trans_seq;
 	u8 status;
 
+	u8 own_addr[ETH_ALEN];
 	u8 bssid[ETH_ALEN];
 	size_t pmk_len;
 	u8 pmk[PMK_LEN_MAX];
@@ -763,6 +765,14 @@ struct wpa_supplicant {
 	struct wpa_bss *current_bss;
 	int ap_ies_from_associnfo;
 	unsigned int assoc_freq;
+	u8 ap_mld_addr[ETH_ALEN];
+	u8 valid_links; /* bitmap of valid MLO link IDs */
+	struct {
+		u8 addr[ETH_ALEN];
+		u8 bssid[ETH_ALEN];
+		unsigned int freq;
+		struct wpa_bss *bss;
+	} links[MAX_NUM_MLD_LINKS];
 	u8 *last_con_fail_realm;
 	size_t last_con_fail_realm_len;
 
@@ -773,6 +783,11 @@ struct wpa_supplicant {
 	int key_mgmt;
 	int wpa_proto;
 	int mgmt_group_cipher;
+	/*
+	 * Allowed key management suites for roaming/initial connection
+	 * when the driver's SME is in use.
+	 */
+	int allowed_key_mgmts;
 
 	void *drv_priv; /* private data used by driver_ops */
 	void *global_drv_priv;
@@ -958,6 +973,7 @@ struct wpa_supplicant {
 	unsigned int max_match_sets;
 	unsigned int max_remain_on_chan;
 	unsigned int max_stations;
+	unsigned int max_num_akms;
 
 	int pending_mic_error_report;
 	int pending_mic_error_pairwise;
@@ -1046,6 +1062,7 @@ struct wpa_supplicant {
 		unsigned int sae_pmksa_caching:1;
 		u16 seq_num;
 		u8 ext_auth_bssid[ETH_ALEN];
+		struct wpa_ssid *ext_auth_wpa_ssid;
 		u8 ext_auth_ssid[SSID_MAX_LEN];
 		size_t ext_auth_ssid_len;
 		int *sae_rejected_groups;
@@ -1495,9 +1512,11 @@ struct wpa_supplicant {
 	int dpp_gas_dialog_token;
 	u8 dpp_intro_bssid[ETH_ALEN];
 	void *dpp_intro_network;
+	u8 dpp_intro_peer_version;
 	struct dpp_pkex *dpp_pkex;
 	struct dpp_bootstrap_info *dpp_pkex_bi;
 	char *dpp_pkex_code;
+	size_t dpp_pkex_code_len;
 	char *dpp_pkex_identifier;
 	enum dpp_pkex_ver dpp_pkex_ver;
 	char *dpp_pkex_auth_cmd;
@@ -1528,6 +1547,27 @@ struct wpa_supplicant {
 	int dpp_reconfig_ssid_id;
 	struct dpp_reconfig_id *dpp_reconfig_id;
 #endif /* CONFIG_DPP2 */
+#ifdef CONFIG_DPP3
+	struct os_reltime dpp_pb_time;
+	bool dpp_pb_configurator;
+	int *dpp_pb_freqs;
+	unsigned int dpp_pb_freq_idx;
+	unsigned int dpp_pb_announce_count;
+	struct wpabuf *dpp_pb_announcement;
+	struct dpp_bootstrap_info *dpp_pb_bi;
+	unsigned int dpp_pb_resp_freq;
+	u8 dpp_pb_init_hash[SHA256_MAC_LEN];
+	int dpp_pb_stop_iter;
+	bool dpp_pb_discovery_done;
+	u8 dpp_pb_c_nonce[DPP_MAX_NONCE_LEN];
+	size_t dpp_pb_c_nonce_len;
+	bool dpp_pb_result_indicated;
+	struct os_reltime dpp_pb_announce_time;
+	struct dpp_pb_info dpp_pb[DPP_PB_INFO_COUNT];
+	u8 dpp_pb_resp_hash[SHA256_MAC_LEN];
+	struct os_reltime dpp_pb_last_resp;
+	char *dpp_pb_cmd;
+#endif /* CONFIG_DPP3 */
 #ifdef CONFIG_TESTING_OPTIONS
 	char *dpp_config_obj_override;
 	char *dpp_discovery_override;
@@ -1553,6 +1593,8 @@ struct wpa_supplicant {
 #ifdef CONFIG_PASN
 	struct wpas_pasn pasn;
 	struct wpa_radio_work *pasn_auth_work;
+	unsigned int pasn_count;
+	struct pasn_auth *pasn_params;
 #endif /* CONFIG_PASN */
 	struct scs_robust_av_data scs_robust_av_req;
 	u8 scs_dialog_token;
@@ -1664,7 +1706,7 @@ void wpa_supplicant_deinit(struct wpa_global *global);
 int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
 			      struct wpa_ssid *ssid);
 void wpa_supplicant_terminate_proc(struct wpa_global *global);
-void wpa_supplicant_rx_eapol(void *ctx, const u8 *src_addr,
+void wpa_supplicant_rx_eapol(void *ctx, const u8 *own_addr,
 			     const u8 *buf, size_t len,
 			     enum frame_encryption encrypted);
 void wpa_supplicant_update_config(struct wpa_supplicant *wpa_s);
@@ -1851,6 +1893,7 @@ static inline int wpas_mode_to_ieee80211_mode(enum wpas_mode mode)
 int wpas_network_disabled(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid);
 int wpas_get_ssid_pmf(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid);
 int pmf_in_use(struct wpa_supplicant *wpa_s, const u8 *addr);
+void wpa_s_setup_sae_pt(struct wpa_config *conf, struct wpa_ssid *ssid);
 
 int wpas_init_ext_pw(struct wpa_supplicant *wpa_s);
 
@@ -1936,7 +1979,7 @@ void wpas_handle_assoc_resp_qos_mgmt(struct wpa_supplicant *wpa_s,
 int wpas_send_dscp_query(struct wpa_supplicant *wpa_s, const char *domain_name,
 			 size_t domain_name_length);
 
-int wpas_pasn_auth_start(struct wpa_supplicant *wpa_s,
+int wpas_pasn_auth_start(struct wpa_supplicant *wpa_s, const u8 *own_addr,
 			 const u8 *bssid, int akmp, int cipher,
 			 u16 group, int network_id,
 			 const u8 *comeback, size_t comeback_len);
@@ -1947,6 +1990,10 @@ int wpas_pasn_auth_rx(struct wpa_supplicant *wpa_s,
 		      const struct ieee80211_mgmt *mgmt, size_t len);
 int disabled_freq(struct wpa_supplicant *wpa_s, int freq);
 
-int wpas_pasn_deauthenticate(struct wpa_supplicant *wpa_s, const u8 *bssid);
+int wpas_pasn_deauthenticate(struct wpa_supplicant *wpa_s, const u8 *own_addr,
+			     const u8 *bssid);
+void wpas_pasn_auth_trigger(struct wpa_supplicant *wpa_s,
+			    struct pasn_auth *pasn_auth);
+void wpas_pasn_auth_work_done(struct wpa_supplicant *wpa_s, int status);
 
 #endif /* WPA_SUPPLICANT_I_H */
