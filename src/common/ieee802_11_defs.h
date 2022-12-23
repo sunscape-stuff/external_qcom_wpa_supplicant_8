@@ -495,6 +495,7 @@
 #define WLAN_EID_EXT_EHT_CAPABILITIES 108
 #define WLAN_EID_EXT_TID_TO_LINK_MAPPING 109
 #define WLAN_EID_EXT_MULTI_LINK_TRAFFIC_INDICATION 110
+#define WLAN_EID_EXT_AKM_SUITE_SELECTOR 114
 
 /* Extended Capabilities field */
 #define WLAN_EXT_CAPAB_20_40_COEX 0
@@ -610,12 +611,20 @@
 #define WLAN_ACTION_ROBUST_AV_STREAMING 19
 #define WLAN_ACTION_UNPROTECTED_DMG 20
 #define WLAN_ACTION_VHT 21
-#define WLAN_ACTION_S1G 22
-#define WLAN_ACTION_S1G_RELAY 23
+#define WLAN_ACTION_UNPROTECTED_S1G 22
+#define WLAN_ACTION_S1G 23
 #define WLAN_ACTION_FLOW_CONTROL 24
 #define WLAN_ACTION_CTRL_RESP_MCS_NEG 25
 #define WLAN_ACTION_FILS 26
+#define WLAN_ACTION_CDMG 27
+#define WLAN_ACTION_CMMG 28
+#define WLAN_ACTION_GLK 29
+#define WLAN_ACTION_HE 30
+#define WLAN_ACTION_PROTECTED_HE 31
+#define WLAN_ACTION_WUR 32
 #define WLAN_ACTION_PROTECTED_FTM 34
+#define WLAN_ACTION_EHT 36
+#define WLAN_ACTION_PROTECTED_EHT 37
 #define WLAN_ACTION_VENDOR_SPECIFIC_PROTECTED 126
 #define WLAN_ACTION_VENDOR_SPECIFIC 127
 /* Note: 128-255 used to report errors by setting category | 0x80 */
@@ -2440,11 +2449,14 @@ struct ieee80211_he_mu_edca_parameter_set {
 
 /* IEEE P802.11be/D1.5, 9.4.2.311 - EHT Operation element */
 
+#define EHT_OPERATION_IE_MIN_LEN 1
+
 /* Figure 9-1002b: EHT Operation Parameters field subfields */
 #define EHT_OPER_INFO_PRESENT                          BIT(0)
 #define EHT_OPER_DISABLED_SUBCHAN_BITMAP_PRESENT       BIT(1)
 
 /* Control subfield: Channel Width subfield; see Table 9-401b */
+#define EHT_OPER_CHANNEL_WIDTH_MASK                    0x7
 #define EHT_OPER_CHANNEL_WIDTH_20MHZ                   0
 #define EHT_OPER_CHANNEL_WIDTH_40MHZ                   1
 #define EHT_OPER_CHANNEL_WIDTH_80MHZ                   2
@@ -2452,6 +2464,8 @@ struct ieee80211_he_mu_edca_parameter_set {
 #define EHT_OPER_CHANNEL_WIDTH_320MHZ                  4
 
 /* Figure 9-1002c: EHT Operation Information field format */
+#define EHT_OPER_INFO_MIN_LEN 3
+
 struct ieee80211_eht_oper_info {
 	u8 control; /* B0..B2: Channel Width */
 	u8 ccfs0;
@@ -2466,6 +2480,8 @@ struct ieee80211_eht_operation {
 } STRUCT_PACKED;
 
 /* IEEE P802.11be/D1.5, 9.4.2.313 - EHT Capabilities element */
+
+#define  EHT_CAPABILITIES_IE_MIN_LEN 11
 
 /* Figure 9-1002af: EHT MAC Capabilities Information field */
 #define EHT_MACCAP_EPCS_PRIO			BIT(0)
@@ -2536,6 +2552,55 @@ struct ieee80211_eht_capabilities {
 	/* Supported EHT-MCS And NSS Set and EHT PPE thresholds (Optional) */
 	u8 optional[EHT_MCS_NSS_CAPAB_LEN + EHT_PPE_THRESH_CAPAB_LEN];
 } STRUCT_PACKED;
+
+/* IEEE P802.11be/D2.1, 9.4.2.312 - Multi-Link element */
+
+/* Figure 9-1002f: Multi-Link Control field */
+#define MULTI_LINK_CONTROL_TYPE_MASK			0x07
+#define MULTI_LINK_CONTROL_LEN				2
+
+/* Table 9-401c: Mult-Link element Type subfield encoding */
+#define MULTI_LINK_CONTROL_TYPE_BASIC			0
+#define MULTI_LINK_CONTROL_TYPE_PROBE_REQ		1
+#define MULTI_LINK_CONTROL_TYPE_RECONF			2
+#define MULTI_LINK_CONTROL_TYPE_TDLS			3
+#define MULTI_LINK_CONTROL_TYPE_PRIOR_ACCESS		4
+
+/*
+ * IEEE P802.11be/D2.2, Table 9-401c: Optional subelement IDs for Link Info
+ * field of the Multi-Link element
+ */
+#define MULTI_LINK_SUB_ELEM_ID_PER_STA_PROFILE		0
+#define MULTI_LINK_SUB_ELEM_ID_VENDOR			221
+#define MULTI_LINK_SUB_ELEM_ID_FRAGMENT			254
+
+/* IEEE P802.11be/D2.2, 9.4.2.312.2 - Basic Multi-Link element */
+
+/* Figure 9-1002g: Presence Bitmap subfield of the Basic Multi-Link element */
+#define BASIC_MULTI_LINK_CTRL0_PRES_LINK_ID		0x10
+#define BASIC_MULTI_LINK_CTRL0_PRES_BSS_PARAM_CH_COUNT	0x20
+#define BASIC_MULTI_LINK_CTRL0_PRES_MSD_INFO		0x40
+#define BASIC_MULTI_LINK_CTRL0_PRES_EML_CAPA		0x80
+
+#define BASIC_MULTI_LINK_CTRL1_PRES_MLD_CAPA		0x01
+#define BASIC_MULTI_LINK_CTRL1_PRES_AP_MLD_ID		0x02
+
+/*
+ * STA Control field definitions of Per-STA Profile subelement in Basic
+ * Multi-Link element as described in Figure 9-1002n: STA Control field format.
+ */
+#define BASIC_MLE_STA_CTRL0_LINK_ID_SHIFT		0
+#define BASIC_MLE_STA_CTRL0_LINK_ID_MASK		0x0F
+#define BASIC_MLE_STA_CTRL0_COMPLETE_PROFILE		0x10
+#define BASIC_MLE_STA_CTRL0_PRES_STA_MAC		0x20
+#define BASIC_MLE_STA_CTRL0_PRES_BEACON_INT		0x40
+#define BASIC_MLE_STA_CTRL0_PRES_TSF_OFFSET		0x80
+#define BASIC_MLE_STA_CTRL1_PRES_DTIM_INFO		0x01
+#define BASIC_MLE_STA_CTRL1_PRES_NSTR_LINK_PAIR		0x02
+#define BASIC_MLE_STA_CTRL1_NSTR_BITMAP			0x04
+#define BASIC_MLE_STA_CTRL1_PRES_BSS_PARAM_COUNT	0x08
+
+#define BASIC_MLE_STA_PROF_STA_MAC_IDX			3
 
 /* IEEE P802.11ay/D4.0, 9.4.2.251 - EDMG Operation element */
 #define EDMG_BSS_OPERATING_CHANNELS_OFFSET	6

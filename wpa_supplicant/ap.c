@@ -176,9 +176,8 @@ no_vht:
 		conf, conf->channel + conf->secondary_channel * 2);
 	hostapd_set_oper_chwidth(conf, CONF_OPER_CHWIDTH_USE_HT);
 	ieee80211_freq_to_channel_ext(ssid->frequency, 0,
-		   conf->vht_oper_chwidth,
-		   &conf->op_class,
-		   &conf->channel);
+				      conf->vht_oper_chwidth,
+				      &conf->op_class, &conf->channel);
 }
 
 
@@ -414,7 +413,9 @@ int wpa_supplicant_conf_ap_ht(struct wpa_supplicant *wpa_s,
 		}
 	}
 
-	if (conf->secondary_channel) {
+	if (wpa_s->p2p_go_no_pri_sec_switch) {
+		conf->no_pri_sec_switch = 1;
+	} else if (conf->secondary_channel) {
 		struct wpa_supplicant *iface;
 
 		for (iface = wpa_s->global->ifaces; iface; iface = iface->next)

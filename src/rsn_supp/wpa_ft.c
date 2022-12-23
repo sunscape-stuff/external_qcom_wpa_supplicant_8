@@ -41,6 +41,7 @@ int wpa_derive_ptk_ft(struct wpa_sm *sm, const unsigned char *src_addr,
 	int use_sha384 = wpa_key_mgmt_sha384(sm->key_mgmt);
 	const u8 *mpmk;
 	size_t mpmk_len, kdk_len;
+	int ret = 0;
 
 	if (sm->xxkey_len > 0) {
 		mpmk = sm->xxkey;
@@ -75,10 +76,22 @@ int wpa_derive_ptk_ft(struct wpa_sm *sm, const unsigned char *src_addr,
 	else
 		kdk_len = 0;
 
-	return wpa_pmk_r1_to_ptk(sm->pmk_r1, sm->pmk_r1_len, sm->snonce, anonce,
-				 sm->own_addr, sm->bssid, sm->pmk_r1_name, ptk,
-				 ptk_name, sm->key_mgmt, sm->pairwise_cipher,
-				 kdk_len);
+	ret = wpa_pmk_r1_to_ptk(sm->pmk_r1, sm->pmk_r1_len, sm->snonce,
+				anonce, sm->own_addr, wpa_sm_get_auth_addr(sm),
+				sm->pmk_r1_name, ptk, ptk_name, sm->key_mgmt,
+				sm->pairwise_cipher, kdk_len);
+	if (ret) {
+		wpa_printf(MSG_ERROR, "FT: PTK derivation failed");
+		return ret;
+	}
+
+#ifdef CONFIG_PASN
+	if (sm->secure_ltf &&
+	    ieee802_11_rsnx_capab(sm->ap_rsnxe, WLAN_RSNX_CAPAB_SECURE_LTF))
+		ret = wpa_ltf_keyseed(ptk, sm->key_mgmt, sm->pairwise_cipher);
+#endif /* CONFIG_PASN */
+
+	return ret;
 }
 
 
@@ -257,6 +270,8 @@ static u8 * wpa_ft_gen_req_ies(struct wpa_sm *sm, size_t *len,
 		RSN_SELECTOR_PUT(pos, RSN_AUTH_KEY_MGMT_FT_PSK);
 	else if (sm->key_mgmt == WPA_KEY_MGMT_FT_SAE)
 		RSN_SELECTOR_PUT(pos, RSN_AUTH_KEY_MGMT_FT_SAE);
+	else if (sm->key_mgmt == WPA_KEY_MGMT_FT_SAE_EXT_KEY)
+		RSN_SELECTOR_PUT(pos, RSN_AUTH_KEY_MGMT_FT_SAE_EXT_KEY);
 #ifdef CONFIG_FILS
 	else if (sm->key_mgmt == WPA_KEY_MGMT_FT_FILS_SHA256)
 		RSN_SELECTOR_PUT(pos, RSN_AUTH_KEY_MGMT_FT_FILS_SHA256);
@@ -461,7 +476,8 @@ static int wpa_ft_install_ptk(struct wpa_sm *sm, const u8 *bssid)
 	alg = wpa_cipher_to_alg(sm->pairwise_cipher);
 	keylen = wpa_cipher_key_len(sm->pairwise_cipher);
 
-	if (wpa_sm_set_key(sm, alg, bssid, 0, 1, null_rsc, sizeof(null_rsc),
+	/* TODO: AP MLD address for MLO */
+	if (wpa_sm_set_key(sm, -1, alg, bssid, 0, 1, null_rsc, sizeof(null_rsc),
 			   (u8 *) sm->ptk.tk, keylen,
 			   KEY_FLAG_PAIRWISE_RX_TX) < 0) {
 		wpa_printf(MSG_WARNING, "FT: Failed to set PTK to the driver");
@@ -679,12 +695,22 @@ int wpa_ft_process_response(struct wpa_sm *sm, const u8 *ies, size_t ies_len,
 	else
 		kdk_len = 0;
 
+	/* TODO: AP MLD address for MLO */
 	if (wpa_pmk_r1_to_ptk(sm->pmk_r1, sm->pmk_r1_len, sm->snonce,
 			      anonce, sm->own_addr, bssid,
 			      sm->pmk_r1_name, &sm->ptk, ptk_name, sm->key_mgmt,
 			      sm->pairwise_cipher,
 			      kdk_len) < 0)
 		return -1;
+
+#ifdef CONFIG_PASN
+	if (sm->secure_ltf &&
+	    ieee802_11_rsnx_capab(sm->ap_rsnxe, WLAN_RSNX_CAPAB_SECURE_LTF) &&
+	    wpa_ltf_keyseed(&sm->ptk, sm->key_mgmt, sm->pairwise_cipher)) {
+		wpa_printf(MSG_DEBUG, "FT: Failed to derive LTF keyseed");
+		return -1;
+	}
+#endif /* CONFIG_PASN */
 
 	if (wpa_key_mgmt_fils(sm->key_mgmt)) {
 		kck = sm->ptk.kck2;
@@ -842,7 +868,7 @@ static int wpa_ft_process_gtk_subelem(struct wpa_sm *sm, const u8 *gtk_elem,
 		os_memcpy(gtk + 16, gtk + 24, 8);
 		os_memcpy(gtk + 24, tmp, 8);
 	}
-	if (wpa_sm_set_key(sm, alg, broadcast_ether_addr, keyidx, 0,
+	if (wpa_sm_set_key(sm, -1, alg, broadcast_ether_addr, keyidx, 0,
 			   gtk_elem + 3, rsc_len, gtk, keylen,
 			   KEY_FLAG_GROUP_RX) < 0) {
 		wpa_printf(MSG_WARNING, "WPA: Failed to set GTK to the "
@@ -909,7 +935,7 @@ static int wpa_ft_process_igtk_subelem(struct wpa_sm *sm, const u8 *igtk_elem,
 
 	wpa_hexdump_key(MSG_DEBUG, "FT: IGTK from Reassoc Resp", igtk,
 			igtk_len);
-	if (wpa_sm_set_key(sm, wpa_cipher_to_alg(sm->mgmt_group_cipher),
+	if (wpa_sm_set_key(sm, -1, wpa_cipher_to_alg(sm->mgmt_group_cipher),
 			   broadcast_ether_addr, keyidx, 0,
 			   igtk_elem + 2, 6, igtk, igtk_len,
 			   KEY_FLAG_GROUP_RX) < 0) {
@@ -977,7 +1003,7 @@ static int wpa_ft_process_bigtk_subelem(struct wpa_sm *sm, const u8 *bigtk_elem,
 
 	wpa_hexdump_key(MSG_DEBUG, "FT: BIGTK from Reassoc Resp", bigtk,
 			bigtk_len);
-	if (wpa_sm_set_key(sm, wpa_cipher_to_alg(sm->mgmt_group_cipher),
+	if (wpa_sm_set_key(sm, -1, wpa_cipher_to_alg(sm->mgmt_group_cipher),
 			   broadcast_ether_addr, keyidx, 0,
 			   bigtk_elem + 2, 6, bigtk, bigtk_len,
 			   KEY_FLAG_GROUP_RX) < 0) {

@@ -29,7 +29,7 @@ struct wpa_sm_ctx {
 	enum wpa_states (*get_state)(void *ctx);
 	void (*deauthenticate)(void * ctx, u16 reason_code);
 	void (*reconnect)(void *ctx);
-	int (*set_key)(void *ctx, enum wpa_alg alg,
+	int (*set_key)(void *ctx, int link_id, enum wpa_alg alg,
 		       const u8 *addr, int key_idx, int set_tx,
 		       const u8 *seq, size_t seq_len,
 		       const u8 *key, size_t key_len, enum key_flag key_flag);
@@ -93,6 +93,11 @@ struct wpa_sm_ctx {
 	void (*transition_disable)(void *ctx, u8 bitmap);
 	void (*store_ptk)(void *ctx, u8 *addr, int cipher,
 			  u32 life_time, const struct wpa_ptk *ptk);
+#ifdef CONFIG_PASN
+	int (*set_ltf_keyseed)(void *ctx, const u8 *own_addr,
+			       const u8 *peer_addr, size_t ltf_keyseed_len,
+			       const u8 *ltf_keyseed);
+#endif /* CONFIG_PASN */
 };
 
 
@@ -139,6 +144,27 @@ struct rsn_supp_config {
 	const u8 *fils_cache_id;
 	int beacon_prot;
 	bool force_kdk_derivation;
+};
+
+struct wpa_sm_link {
+	u8 addr[ETH_ALEN];
+	u8 bssid[ETH_ALEN];
+	u8 *ap_rsne, *ap_rsnxe;
+	size_t ap_rsne_len, ap_rsnxe_len;
+	struct wpa_gtk gtk;
+	struct wpa_gtk gtk_wnm_sleep;
+	struct wpa_igtk igtk;
+	struct wpa_igtk igtk_wnm_sleep;
+	struct wpa_bigtk bigtk;
+	struct wpa_bigtk bigtk_wnm_sleep;
+};
+
+struct wpa_sm_mlo {
+	u8 ap_mld_addr[ETH_ALEN];
+	u8 assoc_link_id;
+	u16 valid_links; /* bitmap of accepted links */
+	u16 req_links; /* bitmap of requested links */
+	struct wpa_sm_link links[MAX_NUM_MLD_LINKS];
 };
 
 #ifndef CONFIG_NO_WPA
@@ -225,6 +251,7 @@ void wpa_sm_set_ptk_kck_kek(struct wpa_sm *sm,
 			    const u8 *ptk_kek, size_t ptk_kek_len);
 int wpa_fils_is_completed(struct wpa_sm *sm);
 void wpa_sm_pmksa_cache_reconfig(struct wpa_sm *sm);
+int wpa_sm_set_mlo_params(struct wpa_sm *sm, const struct wpa_sm_mlo *mlo);
 
 #else /* CONFIG_NO_WPA */
 
@@ -439,6 +466,12 @@ static inline void wpa_sm_pmksa_cache_reconfig(struct wpa_sm *sm)
 {
 }
 
+static inline int wpa_sm_set_mlo_params(struct wpa_sm *sm,
+					const struct wpa_sm_mlo *mlo)
+{
+	return 0;
+}
+
 #endif /* CONFIG_NO_WPA */
 
 #ifdef CONFIG_IEEE80211R
@@ -583,5 +616,7 @@ void wpa_sm_set_fils_cache_id(struct wpa_sm *sm, const u8 *fils_cache_id);
 void wpa_sm_set_dpp_z(struct wpa_sm *sm, const struct wpabuf *z);
 void wpa_pasn_pmksa_cache_add(struct wpa_sm *sm, const u8 *pmk, size_t pmk_len,
 			      const u8 *pmkid, const u8 *bssid, int key_mgmt);
+void wpa_pasn_sm_set_caps(struct wpa_sm *sm, unsigned int flags2);
+const u8 * wpa_sm_get_auth_addr(struct wpa_sm *sm);
 
 #endif /* WPA_H */

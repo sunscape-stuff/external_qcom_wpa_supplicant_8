@@ -3833,6 +3833,10 @@ static enum chan_allowed wpas_p2p_verify_channel(struct wpa_supplicant *wpa_s,
 	int flag = 0;
 	enum chan_allowed res, res2;
 
+	if (is_6ghz_op_class(op_class) && !is_6ghz_psc_frequency(
+			p2p_channel_to_freq(op_class, channel)))
+		return NOT_ALLOWED;
+
 	res2 = res = has_channel(wpa_s->global, mode, op_class, channel, &flag);
 	if (bw == BW40MINUS) {
 		if (!(flag & HOSTAPD_CHAN_HT40MINUS))
@@ -3974,8 +3978,7 @@ int wpas_p2p_get_sec_channel_offset_40mhz(struct wpa_supplicant *wpa_s,
 
 	for (op = 0; global_op_class[op].op_class; op++) {
 		const struct oper_class_map *o = &global_op_class[op];
-		u16 ch;
-		int chan = channel;
+		u16 ch = 0;
 
 		/* Allow DFS channels marked as NO_P2P_SUPP to be used with
 		 * driver offloaded DFS. */
@@ -3986,15 +3989,22 @@ int wpas_p2p_get_sec_channel_offset_40mhz(struct wpa_supplicant *wpa_s,
 		     wpa_s->conf->p2p_6ghz_disable))
 			continue;
 
+		/* IEEE Std 802.11ax-2021 26.17.2.3.2: "A 6 GHz-only AP should
+		 * set up the BSS with a primary 20 MHz channel that coincides
+		 * with a preferred scanning channel (PSC)."
+		 * 6 GHz BW40 operation class 132 in wpa_supplicant uses the
+		 * lowest 20 MHz channel for simplicity, so increase ch by 4 to
+		 * match the PSC.
+		 */
 		if (is_6ghz_op_class(o->op_class) && o->bw == BW40 &&
 		    get_6ghz_sec_channel(channel) < 0)
-			chan = channel - 4;
+			ch = 4;
 
-		for (ch = o->min_chan; ch <= o->max_chan; ch += o->inc) {
+		for (ch += o->min_chan; ch <= o->max_chan; ch += o->inc) {
 			if (o->mode != HOSTAPD_MODE_IEEE80211A ||
 			    (o->bw != BW40PLUS && o->bw != BW40MINUS &&
 			     o->bw != BW40) ||
-			    ch != chan)
+			    ch != channel)
 				continue;
 			ret = wpas_p2p_verify_channel(wpa_s, mode, o->op_class,
 						      ch, o->bw);
@@ -6909,6 +6919,7 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 		       bool allow_6ghz)
 {
 	struct p2p_go_neg_results params;
+	int selected_freq = 0;
 
 	if (wpa_s->global->p2p_disabled || wpa_s->global->p2p == NULL)
 		return -1;
@@ -6923,12 +6934,12 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 	wpas_p2p_stop_find_oper(wpa_s);
 
 	if (!wpa_s->p2p_go_do_acs) {
-		freq = wpas_p2p_select_go_freq(wpa_s, freq);
-		if (freq < 0)
+		selected_freq = wpas_p2p_select_go_freq(wpa_s, freq);
+		if (selected_freq < 0)
 			return -1;
 	}
 
-	if (wpas_p2p_init_go_params(wpa_s, &params, freq, vht_center_freq2,
+	if (wpas_p2p_init_go_params(wpa_s, &params, selected_freq, vht_center_freq2,
 				    ht40, vht, max_oper_chwidth, he, edmg,
 				    NULL))
 		return -1;
@@ -6939,6 +6950,8 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 	wpa_s = wpas_p2p_get_group_iface(wpa_s, 0, 1);
 	if (wpa_s == NULL)
 		return -1;
+	if (freq > 0)
+		wpa_s->p2p_go_no_pri_sec_switch = 1;
 	wpas_start_wps_go(wpa_s, &params, 0);
 
 	return 0;
@@ -6950,6 +6963,8 @@ static int wpas_start_p2p_client(struct wpa_supplicant *wpa_s,
 				 int freq, int force_scan)
 {
 	struct wpa_ssid *ssid;
+	int other_iface_found = 0;
+	struct wpa_supplicant *ifs;
 
 	wpa_s = wpas_p2p_get_group_iface(wpa_s, addr_allocated, 0);
 	if (wpa_s == NULL)
@@ -6993,6 +7008,26 @@ static int wpas_start_p2p_client(struct wpa_supplicant *wpa_s,
 	wpa_s->p2p_invite_go_freq = freq;
 	wpa_s->p2p_go_group_formation_completed = 0;
 	wpa_s->global->p2p_group_formation = wpa_s;
+
+	/*
+	 * Get latest scan results from driver in case cached scan results from
+	 * interfaces on the same wiphy allow us to skip the next scan by fast
+	 * associating. Also update the scan time to the most recent scan result
+	 * fetch time on the same radio so it reflects the actual time the last
+	 * scan result event occurred.
+	 */
+	wpa_supplicant_update_scan_results(wpa_s);
+	dl_list_for_each(ifs, &wpa_s->radio->ifaces, struct wpa_supplicant,
+			 radio_list) {
+		if (ifs == wpa_s)
+			continue;
+		if (!other_iface_found || os_reltime_before(&wpa_s->last_scan,
+							    &ifs->last_scan)) {
+			other_iface_found = 1;
+			wpa_s->last_scan.sec = ifs->last_scan.sec;
+			wpa_s->last_scan.usec = ifs->last_scan.usec;
+		}
+	}
 
 	eloop_cancel_timeout(wpas_p2p_group_formation_timeout, wpa_s->p2pdev,
 			     NULL);
@@ -7058,6 +7093,7 @@ int wpas_p2p_group_add_persistent(struct wpa_supplicant *wpa_s,
 			freq = wpas_p2p_select_go_freq(wpa_s, force_freq);
 			if (freq < 0)
 				return -1;
+			wpa_s->p2p_go_no_pri_sec_switch = 1;
 		} else {
 			freq = wpas_p2p_select_go_freq(wpa_s, neg_freq);
 			if (freq < 0 ||
@@ -9674,9 +9710,6 @@ static void wpas_p2p_optimize_listen_channel(struct wpa_supplicant *wpa_s,
 	if (!wpa_s->conf->p2p_optimize_listen_chan)
 		return;
 
-	if (!wpa_s->current_ssid || wpa_s->wpa_state != WPA_COMPLETED)
-		return;
-
 	curr_chan = p2p_get_listen_channel(wpa_s->global->p2p);
 	for (i = 0, cand = 0; i < num; i++) {
 		ieee80211_freq_to_chan(freqs[i].freq, &chan);
@@ -9746,10 +9779,13 @@ static int wpas_p2p_move_go_csa(struct wpa_supplicant *wpa_s)
 
 	if (conf->hw_mode != wpa_s->ap_iface->current_mode->mode &&
 	    (wpa_s->ap_iface->current_mode->mode != HOSTAPD_MODE_IEEE80211A ||
+	     is_6ghz_freq(wpa_s->ap_iface->freq) ||
 	     conf->hw_mode != HOSTAPD_MODE_IEEE80211G)) {
 		wpa_dbg(wpa_s, MSG_INFO,
-			"P2P CSA: CSA from Hardware mode %d to %d is not supported",
-			wpa_s->ap_iface->current_mode->mode, conf->hw_mode);
+			"P2P CSA: CSA from hardware mode %d%s to %d is not supported",
+			wpa_s->ap_iface->current_mode->mode,
+			is_6ghz_freq(wpa_s->ap_iface->freq) ? " (6 GHz)" : "",
+			conf->hw_mode);
 		ret = -1;
 		goto out;
 	}

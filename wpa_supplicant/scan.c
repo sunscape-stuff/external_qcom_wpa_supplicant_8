@@ -1036,19 +1036,6 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 	}
 
 #ifdef CONFIG_P2P
-#ifdef ANDROID
-	if (wpa_s->global->p2p_go_found_external_scan &&
-	    (wpa_s->p2p_group_interface == P2P_GROUP_INTERFACE_CLIENT) &&
-	    (wpa_s->global->p2p_group_formation == wpa_s)) {
-		wpa_dbg(wpa_s, MSG_DEBUG,
-			"Try to fast associate since GO is found in external scan");
-		wpa_s->global->p2p_go_found_external_scan = 0;
-		if (wpa_supplicant_fast_associate(wpa_s) >= 0) {
-			return;
-		}
-	}
-#endif
-
 	if ((wpa_s->p2p_in_provisioning || wpa_s->show_group_started) &&
 	    wpa_s->go_params && !wpa_s->conf->passive_scan) {
 		wpa_printf(MSG_DEBUG, "P2P: Use specific SSID for scan during P2P group formation (p2p_in_provisioning=%d show_group_started=%d)",
@@ -1384,8 +1371,6 @@ scan:
 	    (wpa_s->p2p_in_invitation || wpa_s->p2p_in_provisioning) &&
 	    !is_p2p_allow_6ghz(wpa_s->global->p2p) &&
 	    is_6ghz_supported(wpa_s)) {
-		int i;
-
 		/* Exclude 6 GHz channels from the full scan for P2P connection
 		 * since the 6 GHz band is disabled for P2P uses. */
 		wpa_printf(MSG_DEBUG,
@@ -1942,6 +1927,18 @@ const u8 * wpa_scan_get_ie(const struct wpa_scan_res *res, u8 ie)
 		ie_len = res->beacon_ie_len;
 
 	return get_ie((const u8 *) (res + 1), ie_len, ie);
+}
+
+
+const u8 * wpa_scan_get_ml_ie(const struct wpa_scan_res *res, u8 type)
+{
+	size_t ie_len = res->ie_len;
+
+	/* Use the Beacon frame IEs if res->ie_len is not available */
+	if (!ie_len)
+		ie_len = res->beacon_ie_len;
+
+	return get_ml_ie((const u8 *) (res + 1), ie_len, type);
 }
 
 
