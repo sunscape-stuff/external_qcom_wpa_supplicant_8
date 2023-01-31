@@ -656,40 +656,46 @@ int AidlManager::notifyStateChange(struct wpa_supplicant *wpa_s)
 		return 1;
 
 	// Invoke the |onStateChanged| method on all registered callbacks.
-	uint32_t aidl_network_id = UINT32_MAX;
-	std::vector<uint8_t> aidl_ssid;
+	SupplicantStateChangeData aidl_state_change_data = {};
+	aidl_state_change_data.id = UINT32_MAX;
+	aidl_state_change_data.newState = static_cast<StaIfaceCallbackState>(wpa_s->wpa_state);
+
 	if (wpa_s->current_ssid) {
-		aidl_network_id = wpa_s->current_ssid->id;
-		aidl_ssid.assign(
+		aidl_state_change_data.id = wpa_s->current_ssid->id;
+		std::vector<uint8_t> aidl_ssid(
 			wpa_s->current_ssid->ssid,
 			wpa_s->current_ssid->ssid + wpa_s->current_ssid->ssid_len);
+		aidl_state_change_data.ssid = aidl_ssid;
 		wpa_printf(MSG_INFO, "assoc key_mgmt 0x%x network key_mgmt 0x%x",
 			wpa_s->key_mgmt, wpa_s->current_ssid->key_mgmt);
 	}
-	std::vector<uint8_t> bssid;
+	std::vector<uint8_t> aidl_bssid;
 	// wpa_supplicant sets the |pending_bssid| field when it starts a
 	// connection. Only after association state does it update the |bssid|
 	// field. So, in the AIDL callback send the appropriate bssid.
 	if (wpa_s->wpa_state <= WPA_ASSOCIATED) {
-		bssid = macAddrToVec(wpa_s->pending_bssid);
+		aidl_bssid = macAddrToVec(wpa_s->pending_bssid);
 	} else {
-		bssid = macAddrToVec(wpa_s->bssid);
+		aidl_bssid = macAddrToVec(wpa_s->bssid);
 	}
-	bool fils_hlp_sent =
+	aidl_state_change_data.bssid = aidl_bssid;
+
+	aidl_state_change_data.filsHlpSent =
 		(wpa_auth_alg_fils(wpa_s->auth_alg) &&
 		 !dl_list_empty(&wpa_s->fils_hlp_req) &&
 		 (wpa_s->wpa_state == WPA_COMPLETED)) ? true : false;
+	aidl_state_change_data.keyMgmtMask = (KeyMgmtMask) wpa_s->key_mgmt;
+	// wpa_supplicant sets the frequency on receiving the EVENT_ASSOC.
+	aidl_state_change_data.frequencyMhz =
+		wpa_s->wpa_state >= WPA_ASSOCIATED ? wpa_s->assoc_freq : 0;
 
 	// Invoke the |onStateChanged| method on all registered callbacks.
 	std::function<
 		ndk::ScopedAStatus(std::shared_ptr<ISupplicantStaIfaceCallback>)>
 		func = std::bind(
-			&ISupplicantStaIfaceCallback::onStateChangedWithAkm,
+			&ISupplicantStaIfaceCallback::onSupplicantStateChanged,
 			std::placeholders::_1,
-			static_cast<StaIfaceCallbackState>(
-				wpa_s->wpa_state),
-				bssid, aidl_network_id, aidl_ssid,
-				fils_hlp_sent, (KeyMgmtMask) wpa_s->key_mgmt);
+			aidl_state_change_data);
 	callWithEachStaIfaceCallback(
 		misc_utils::charBufToString(wpa_s->ifname), func);
 	return 0;
@@ -759,6 +765,30 @@ int AidlManager::notifyNetworkRequest(
 		}
 	}
 	return 1;
+}
+
+/**
+ * Notify that the AT_PERMANENT_ID_REQ is denied from eap_peer when the strict
+ * conservative peer mode is enabled.
+ *
+ * @param wpa_s |wpa_supplicant| struct corresponding to the interface on which
+ * the network is present.
+*/
+void AidlManager::notifyPermanentIdReqDenied(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s->current_ssid) {
+		wpa_printf(MSG_ERROR, "Current network NULL. Drop permanent_id_req_denied event!");
+		return;
+	}
+	struct wpa_ssid *current_ssid = wpa_s->current_ssid;
+
+	callWithEachStaNetworkCallback(
+			misc_utils::charBufToString(wpa_s->ifname),
+			current_ssid->id,
+			std::bind(
+			&ISupplicantStaNetworkCallback::
+				onPermanentIdReqDenied,
+			std::placeholders::_1));
 }
 
 /**
@@ -1967,24 +1997,33 @@ void AidlManager::notifyNetworkNotFound(struct wpa_supplicant *wpa_s)
 	callWithEachStaIfaceCallback(misc_utils::charBufToString(wpa_s->ifname), func);
 }
 
-void AidlManager::notifyFrequencyChanged(struct wpa_supplicant *wpa_group_s, int frequency)
+void AidlManager::notifyFrequencyChanged(struct wpa_supplicant *wpa_s, int frequency)
 {
-	if (!wpa_group_s || !wpa_group_s->parent)
+	if (!wpa_s)
 		return;
 
-	// For group notifications, need to use the parent iface for callbacks.
-	struct wpa_supplicant *wpa_s = getTargetP2pIfaceForGroup(wpa_group_s);
-	if (!wpa_s) {
+	std::string aidl_ifname = misc_utils::charBufToString(wpa_s->ifname);
+	struct wpa_supplicant *wpa_p2pdev_s = getTargetP2pIfaceForGroup(wpa_s);
+	if (wpa_p2pdev_s) {
+		// Notify frequency changed event on P2P interface
+		const std::function<
+			ndk::ScopedAStatus(std::shared_ptr<ISupplicantP2pIfaceCallback>)>
+			func = std::bind(&ISupplicantP2pIfaceCallback::onGroupFrequencyChanged,
+			std::placeholders::_1, aidl_ifname, frequency);
+		// For group notifications, need to use the parent iface for callbacks.
+		callWithEachP2pIfaceCallback(misc_utils::charBufToString(wpa_p2pdev_s->ifname), func);
+	} else if (wpa_s->current_ssid) {
+		// Notify frequency changed event on STA interface
+		const std::function<
+			ndk::ScopedAStatus(std::shared_ptr<ISupplicantStaIfaceCallback>)>
+			func = std::bind(
+			&ISupplicantStaIfaceCallback::onBssFrequencyChanged,
+			std::placeholders::_1, frequency);
+		callWithEachStaIfaceCallback(aidl_ifname, func);
+	} else {
 		wpa_printf(MSG_INFO, "Drop frequency changed event");
 		return;
-	}
-
-	const std::function<
-		ndk::ScopedAStatus(std::shared_ptr<ISupplicantP2pIfaceCallback>)>
-		func = std::bind(&ISupplicantP2pIfaceCallback::onGroupFrequencyChanged,
-		std::placeholders::_1, misc_utils::charBufToString(wpa_group_s->ifname),
-		frequency);
-	callWithEachP2pIfaceCallback(misc_utils::charBufToString(wpa_s->ifname), func);
+        }
 }
 
 void AidlManager::notifyCertification(struct wpa_supplicant *wpa_s,
