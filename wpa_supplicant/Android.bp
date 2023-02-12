@@ -68,12 +68,12 @@ cc_defaults {
     srcs: [":wpa_supplicant_srcs"],
     shared_libs: [
         "android.hardware.wifi.supplicant-V2-ndk",
+        "android.system.keystore2-V1-ndk",
         "libbase",
         "libc",
         "libcrypto",
         "libcutils",
         "libkeystore-engine-wifi-hidl",
-        "libkeystore-wifi-hidl",
         "liblog",
         "libnl",
         "libssl",
