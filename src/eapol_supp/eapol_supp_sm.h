@@ -255,6 +255,14 @@ struct eapol_ctx {
 			const char *cert_hash);
 
 	/**
+	 * permanent_id_req_denied_cb - Notify that the AT_PERMANENT_ID_REQ
+	 * from the server was denied. This notification happens when the
+	 * peer is in the strict conservative mode.
+	 * @ctx: Callback context (ctx)
+	*/
+	void (*permanent_id_req_denied_cb)(void *ctx);
+
+	/**
 	 * cert_in_cb - Include server certificates in callback
 	 */
 	int cert_in_cb;
@@ -328,6 +336,15 @@ struct eapol_ctx {
 	 * Returns: Whether the current session requires encryption
 	 */
 	bool (*encryption_required)(void *ctx);
+
+	/**
+	 * get_certificate_cb - Retrieve a certificate from the certificate store
+	 * @alias: key into the certificate key-value store
+	 * @value: pointer reference - pointer to the retrieved certificate will
+	 *         be stored here on success
+	 * Returns: size of the retrieved certificate or -1 on error
+	 */
+	ssize_t (*get_certificate_cb)(const char* alias, uint8_t** value);
 };
 
 

@@ -1093,6 +1093,12 @@ static void wpa_supplicant_port_cb(void *ctx, int authorized)
 	wpa_drv_set_supp_port(wpa_s, authorized);
 }
 
+static void wpa_supplicant_permanent_id_req_denied_cb(void *ctx)
+{
+	struct wpas_supplicant *wpa_s = ctx;
+
+	wpas_notify_permanent_id_req_denied(wpa_s);
+}
 
 static void wpa_supplicant_cert_cb(void *ctx, struct tls_cert_data *cert,
 				   const char *cert_hash)
@@ -1197,6 +1203,12 @@ static bool wpas_encryption_required(void *ctx)
 		wpa_sm_pmf_enabled(wpa_s->wpa);
 }
 
+static ssize_t wpa_supplicant_get_certificate_cb(
+						const char* alias, uint8_t** value)
+{
+	return wpas_get_certificate(alias, value);
+}
+
 #endif /* IEEE8021X_EAPOL */
 
 
@@ -1238,6 +1250,7 @@ int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s)
 	ctx->port_cb = wpa_supplicant_port_cb;
 	ctx->cb = wpa_supplicant_eapol_cb;
 	ctx->cert_cb = wpa_supplicant_cert_cb;
+	ctx->permanent_id_req_denied_cb = wpa_supplicant_permanent_id_req_denied_cb;
 	ctx->cert_in_cb = wpa_s->conf->cert_in_cb;
 	ctx->status_cb = wpa_supplicant_status_cb;
 	ctx->eap_error_cb = wpa_supplicant_eap_error_cb;
@@ -1245,6 +1258,7 @@ int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s)
 	ctx->set_anon_id = wpa_supplicant_set_anon_id;
 	ctx->eap_method_selected_cb = wpa_supplicant_eap_method_selected_cb;
 	ctx->open_ssl_failure_cb = wpa_supplicant_open_ssl_failure_cb;
+	ctx->get_certificate_cb = wpa_supplicant_get_certificate_cb;
 	ctx->encryption_required = wpas_encryption_required;
 	ctx->cb_ctx = wpa_s;
 	wpa_s->eapol = eapol_sm_init(ctx);
@@ -1389,7 +1403,7 @@ static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
 		changed = 1;
 	}
 
-#ifdef CONFIG_DRIVER_NL80211_BRCM
+#if defined(CONFIG_DRIVER_NL80211_BRCM) || defined(CONFIG_DRIVER_NL80211_SYNA)
 	/* driver call for transition disable */
 	{
 		struct wpa_driver_associate_params params;
@@ -1398,7 +1412,7 @@ static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
 		params.td_policy = bitmap;
 		wpa_drv_update_connect_params(wpa_s, &params, WPA_DRV_UPDATE_TD_POLICY);
 	}
-#endif /* CONFIG_DRIVER_NL80211_BRCM */
+#endif /* CONFIG_DRIVER_NL80211_BRCM || CONFIG_DRIVER_NL80211_SYNA */
 
 	wpas_notify_transition_disable(wpa_s, ssid, bitmap);
 

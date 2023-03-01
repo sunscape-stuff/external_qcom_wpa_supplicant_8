@@ -280,6 +280,12 @@ void wpas_notify_network_request(struct wpa_supplicant *wpa_s,
 }
 
 
+void wpas_notify_permanent_id_req_denied(struct wpa_supplicant *wpa_s)
+{
+	wpas_aidl_notify_permanent_id_req_denied(wpa_s);
+}
+
+
 void wpas_notify_scanning(struct wpa_supplicant *wpa_s)
 {
 	if (wpa_s->p2p_mgmt)
@@ -1345,4 +1351,9 @@ void wpas_notify_frequency_changed(struct wpa_supplicant *wpa_s, int frequency)
 		return;
 
 	wpas_aidl_notify_frequency_changed(wpa_s, frequency);
+}
+
+ssize_t wpas_get_certificate(const char *alias, uint8_t** value)
+{
+	return wpas_aidl_get_certificate(alias, value);
 }

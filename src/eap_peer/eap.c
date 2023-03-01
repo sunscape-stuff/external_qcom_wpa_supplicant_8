@@ -2196,6 +2196,14 @@ static void eap_peer_sm_tls_event(void *ctx, enum tls_event ev,
 	os_free(hash_hex);
 }
 
+ssize_t tls_certificate_callback(void* ctx, const char* alias, uint8_t** value) {
+	if (alias == NULL || ctx == NULL || value == NULL) return -1;
+	struct eap_sm *sm = (struct eap_sm*) ctx;
+	if (sm->eapol_cb && sm->eapol_cb->get_certificate) {
+		return sm->eapol_cb->get_certificate(sm->eapol_ctx, alias, value);
+	}
+	return -1;
+}
 
 /**
  * eap_peer_sm_init - Allocate and initialize EAP peer state machine
@@ -2239,6 +2247,7 @@ struct eap_sm * eap_peer_sm_init(void *eapol_ctx,
 	tlsconf.event_cb = eap_peer_sm_tls_event;
 	tlsconf.cb_ctx = sm;
 	tlsconf.cert_in_cb = conf->cert_in_cb;
+	tls_register_cert_callback(&tls_certificate_callback);
 	sm->ssl_ctx = tls_init(&tlsconf);
 	if (sm->ssl_ctx == NULL) {
 		wpa_printf(MSG_WARNING, "SSL: Failed to initialize TLS "
@@ -3099,6 +3108,19 @@ int eap_get_config_fragment_size(struct eap_sm *sm)
 int eap_key_available(struct eap_sm *sm)
 {
 	return sm ? sm->eapKeyAvailable : 0;
+}
+
+/**
+ * eap_notify_permanent_id_req_denied - Notify that the AT_PERMANENT_ID_REQ
+ * is denied from eap_peer when the strict conservative mode is enabled.
+ * @sm: Pointer to EAP state machine allocated with eap_peer_sm_init()
+*/
+void eap_notify_permanent_id_req_denied(struct eap_sm *sm)
+{
+	if (!sm || !sm->eapol_cb->notify_permanent_id_req_denied)
+		return;
+
+	sm->eapol_cb->notify_permanent_id_req_denied(sm->eapol_ctx);
 }
 
 
