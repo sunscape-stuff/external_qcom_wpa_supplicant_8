@@ -6563,6 +6563,8 @@ union wpa_event_data {
 		const u8 *peer;
 		const u8 *ie;
 		size_t ie_len;
+		int assoc_link_id;
+		const u8 *link_addr;
 	} update_dh;
 
 	/**
