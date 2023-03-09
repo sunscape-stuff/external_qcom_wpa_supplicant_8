@@ -395,6 +395,10 @@ static int ieee802_11_parse_extension(const u8 *pos, size_t elen,
 					 show_errors))
 			return -1;
 		break;
+	case WLAN_EID_EXT_KNOWN_BSSID:
+		elems->mbssid_known_bss = pos;
+		elems->mbssid_known_bss_len = elen;
+		break;
 	default:
 		if (show_errors) {
 			wpa_printf(MSG_MSGDUMP,
@@ -1322,8 +1326,9 @@ static int ieee80211_chan_to_freq_us(u8 op_class, u8 chan)
 		if (chan < 25 || chan > 29)
 			return -1;
 		return 56160 + 2160 * (chan - 24);
+	default:
+		return -1;
 	}
-	return -1;
 }
 
 
@@ -1372,8 +1377,9 @@ static int ieee80211_chan_to_freq_eu(u8 op_class, u8 chan)
 		if (chan != 25)
 			return -1;
 		return 56160 + 2160 * (chan - 24);
+	default:
+		return -1;
 	}
-	return -1;
 }
 
 
@@ -1428,8 +1434,9 @@ static int ieee80211_chan_to_freq_jp(u8 op_class, u8 chan)
 		if (chan != 25)
 			return -1;
 		return 56160 + 2160 * (chan - 24);
+	default:
+		return -1;
 	}
-	return -1;
 }
 
 
@@ -1454,8 +1461,9 @@ static int ieee80211_chan_to_freq_cn(u8 op_class, u8 chan)
 		if (chan < 149 || chan > 165)
 			return -1;
 		return 5000 + 5 * chan;
+	default:
+		return -1;
 	}
-	return -1;
 }
 
 
@@ -1541,8 +1549,9 @@ static int ieee80211_chan_to_freq_global(u8 op_class, u8 chan)
 		if (chan < 25 || chan > 29)
 			return -1;
 		return 56160 + 2160 * (chan - 24);
+	default:
+		return -1;
 	}
-	return -1;
 }
 
 /**
@@ -1882,6 +1891,9 @@ const char * status2str(u16 status)
 	S2S(DENIED_HE_NOT_SUPPORTED)
 	S2S(SAE_HASH_TO_ELEMENT)
 	S2S(SAE_PK)
+	S2S(INVALID_PUBLIC_KEY)
+	S2S(PASN_BASE_AKMP_FAILED)
+	S2S(OCI_MISMATCH)
 	}
 	return "UNKNOWN";
 #undef S2S
@@ -2676,9 +2688,9 @@ int op_class_to_bandwidth(u8 op_class)
 		return 6480;
 	case 183: /* 60 GHz band, EDMG CB4, channel 25..29 */
 		return 8640;
+	default:
+		return 20;
 	}
-
-	return 20;
 }
 
 
@@ -2740,8 +2752,9 @@ enum oper_chan_width op_class_to_ch_width(u8 op_class)
 		return CONF_OPER_CHWIDTH_6480MHZ;
 	case 183: /* 60 GHz band, EDMG CB4, channel 25..29 */
 		return CONF_OPER_CHWIDTH_8640MHZ;
+	default:
+		return CONF_OPER_CHWIDTH_USE_HT;
 	}
-	return CONF_OPER_CHWIDTH_USE_HT;
 }
 
 struct wpabuf * ieee802_11_defrag_data(const u8 *data, size_t len,

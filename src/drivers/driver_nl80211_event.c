@@ -535,18 +535,18 @@ static void nl80211_get_basic_mle_links_info(const u8 *mle, size_t mle_len,
 		if (pos[0] == MULTI_LINK_SUB_ELEM_ID_PER_STA_PROFILE) {
 			u8 link_id;
 			const u8 *sta_profile;
+			u16 sta_ctrl;
 
 			if (pos[1] < BASIC_MLE_STA_PROF_STA_MAC_IDX + ETH_ALEN)
 				goto next_subelem;
 
 			sta_profile = &pos[2];
-			link_id = sta_profile[0] &
-				BASIC_MLE_STA_CTRL0_LINK_ID_MASK;
+			sta_ctrl = WPA_GET_LE16(sta_profile);
+			link_id = sta_ctrl & BASIC_MLE_STA_CTRL_LINK_ID_MASK;
 			if (link_id >= MAX_NUM_MLD_LINKS)
 				goto next_subelem;
 
-			if (!(sta_profile[0] &
-			      BASIC_MLE_STA_CTRL0_PRES_STA_MAC))
+			if (!(sta_ctrl & BASIC_MLE_STA_CTRL_PRES_STA_MAC))
 				goto next_subelem;
 
 			info->non_assoc_links |= BIT(link_id);
@@ -639,7 +639,13 @@ static int nl80211_update_rejected_links_info(struct driver_sta_mlo_info *mlo,
 
 static int nl80211_get_assoc_link_id(const u8 *data, u8 len)
 {
-	if (!(data[0] & BASIC_MULTI_LINK_CTRL0_PRES_LINK_ID))
+	u16 control;
+
+	if (len < 2)
+		return -1;
+
+	control = WPA_GET_LE16(data);
+	if (!(control & BASIC_MULTI_LINK_CTRL_PRES_LINK_ID))
 		return -1;
 
 #define BASIC_ML_IE_COMMON_INFO_LINK_ID_IDX \
@@ -1239,8 +1245,11 @@ static void mlme_event_deauth_disassoc(struct wpa_driver_nl80211_data *drv,
 			 * ignore_next_local_deauth as well, to avoid next local
 			 * deauth event be wrongly ignored.
 			 */
-			if (!os_memcmp(mgmt->sa, drv->first_bss->addr,
-				       ETH_ALEN)) {
+			if (os_memcmp(mgmt->sa, drv->first_bss->addr,
+				      ETH_ALEN) == 0 ||
+			    (!is_zero_ether_addr(drv->first_bss->prev_addr) &&
+			     os_memcmp(mgmt->sa, drv->first_bss->prev_addr,
+				       ETH_ALEN) == 0)) {
 				wpa_printf(MSG_DEBUG,
 					   "nl80211: Received a locally generated deauth event. Clear ignore_next_local_deauth flag");
 				drv->ignore_next_local_deauth = 0;
@@ -1450,7 +1459,10 @@ static void mlme_event(struct i802_bss *bss,
 		   os_memcmp(bss->addr, data + 4, ETH_ALEN) != 0 &&
 		   (is_zero_ether_addr(bss->rand_addr) ||
 		    os_memcmp(bss->rand_addr, data + 4, ETH_ALEN) != 0) &&
-		   os_memcmp(bss->addr, data + 4 + ETH_ALEN, ETH_ALEN) != 0) {
+		   os_memcmp(bss->addr, data + 4 + ETH_ALEN, ETH_ALEN) != 0 &&
+		   (is_zero_ether_addr(drv->first_bss->prev_addr) ||
+		    os_memcmp(bss->prev_addr, data + 4 + ETH_ALEN,
+			      ETH_ALEN) != 0)) {
 		wpa_printf(MSG_MSGDUMP, "nl80211: %s: Ignore MLME frame event "
 			   "for foreign address", bss->ifname);
 		return;
@@ -1672,7 +1684,7 @@ static void send_scan_event(struct wpa_driver_nl80211_data *drv, int aborted,
 	struct nlattr *nl;
 	int rem;
 	struct scan_info *info;
-#define MAX_REPORT_FREQS 100
+#define MAX_REPORT_FREQS 110
 	int freqs[MAX_REPORT_FREQS];
 	int num_freqs = 0;
 
@@ -1704,7 +1716,7 @@ static void send_scan_event(struct wpa_driver_nl80211_data *drv, int aborted,
 		}
 	}
 	if (tb[NL80211_ATTR_SCAN_FREQUENCIES]) {
-		char msg[500], *pos, *end;
+		char msg[MAX_REPORT_FREQS * 5], *pos, *end;
 		int res;
 
 		pos = msg;
@@ -1827,11 +1839,11 @@ static void nl80211_cqm_event(struct wpa_driver_nl80211_data *drv,
 	 * nl80211_get_link_signal() and nl80211_get_link_noise() set default
 	 * values in case querying the driver fails.
 	 */
-	res = nl80211_get_link_signal(drv, drv->bssid, &ed.signal_change);
+	res = nl80211_get_link_signal(drv, drv->bssid, &ed.signal_change.data);
 	if (res == 0) {
-		wpa_printf(MSG_DEBUG, "nl80211: Signal: %d dBm  txrate: %d",
-			   ed.signal_change.current_signal,
-			   ed.signal_change.current_txrate);
+		wpa_printf(MSG_DEBUG, "nl80211: Signal: %d dBm  txrate: %lu",
+			   ed.signal_change.data.signal,
+			   ed.signal_change.data.current_tx_rate);
 	} else {
 		wpa_printf(MSG_DEBUG,
 			   "nl80211: Querying the driver for signal info failed");
@@ -2443,6 +2455,14 @@ static void qca_nl80211_key_mgmt_auth(struct wpa_driver_nl80211_data *drv,
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PMK],
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PMKID],
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_MLO_LINKS]);
+
+#ifdef ANDROID
+#ifdef ANDROID_LIB_EVENT
+	wpa_driver_nl80211_driver_event(
+		drv, OUI_QCA, QCA_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH,
+		data, len);
+#endif /* ANDROID_LIB_EVENT */
+#endif /* ANDROID */
 }
 
 
@@ -2811,11 +2831,11 @@ static void qca_nl80211_pasn_auth(struct wpa_driver_nl80211_data *drv,
 		nl_src = cfg[QCA_WLAN_VENDOR_ATTR_PASN_PEER_SRC_ADDR];
 		nl_peer = cfg[QCA_WLAN_VENDOR_ATTR_PASN_PEER_MAC_ADDR];
 		if (nl_src)
-			os_memcpy(event.pasn_auth.peer[idx].own_addr, nl_src,
-				  ETH_ALEN);
+			os_memcpy(event.pasn_auth.peer[idx].own_addr,
+				  nla_data(nl_src), ETH_ALEN);
 		if (nl_peer)
-			os_memcpy(event.pasn_auth.peer[idx].peer_addr, nl_peer,
-				  ETH_ALEN);
+			os_memcpy(event.pasn_auth.peer[idx].peer_addr,
+				  nla_data(nl_peer), ETH_ALEN);
 		if (cfg[QCA_WLAN_VENDOR_ATTR_PASN_PEER_LTF_KEYSEED_REQUIRED])
 			event.pasn_auth.peer[idx].ltf_keyseed_required = true;
 		idx++;
@@ -3002,7 +3022,13 @@ static void nl80211_vendor_event(struct wpa_driver_nl80211_data *drv,
 
 #ifdef ANDROID
 #ifdef ANDROID_LIB_EVENT
-       wpa_driver_nl80211_driver_event(drv, vendor_id, subcmd, data, len);
+	/* Postpone QCA roam+auth event indication to the point when both that
+	 * and the NL80211_CMD_ROAM event have been received (see calls to
+	 * qca_nl80211_key_mgmt_auth() and drv->pending_roam_data). */
+	if (!(vendor_id == OUI_QCA &&
+	      subcmd == QCA_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH))
+		wpa_driver_nl80211_driver_event(drv, vendor_id, subcmd, data,
+						len);
 #endif /* ANDROID_LIB_EVENT */
 #endif /* ANDROID */
 
@@ -3180,6 +3206,9 @@ static void nl80211_port_authorized(struct wpa_driver_nl80211_data *drv,
 				    struct nlattr **tb)
 {
 	const u8 *addr;
+	union wpa_event_data event;
+
+	os_memset(&event, 0, sizeof(event));
 
 	if (!tb[NL80211_ATTR_MAC] ||
 	    nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN) {
@@ -3197,7 +3226,15 @@ static void nl80211_port_authorized(struct wpa_driver_nl80211_data *drv,
 		return;
 	}
 
-	wpa_supplicant_event(drv->ctx, EVENT_PORT_AUTHORIZED, NULL);
+	if (tb[NL80211_ATTR_TD_BITMAP]) {
+		event.port_authorized.td_bitmap_len =
+			nla_len(tb[NL80211_ATTR_TD_BITMAP]);
+		if (event.port_authorized.td_bitmap_len > 0)
+			event.port_authorized.td_bitmap =
+				nla_data(tb[NL80211_ATTR_TD_BITMAP]);
+	}
+
+	wpa_supplicant_event(drv->ctx, EVENT_PORT_AUTHORIZED, &event);
 }
 
 

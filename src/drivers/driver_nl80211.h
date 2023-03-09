@@ -73,6 +73,7 @@ struct i802_bss {
 	unsigned int use_nl_connect:1;
 
 	u8 addr[ETH_ALEN];
+	u8 prev_addr[ETH_ALEN];
 
 	int freq;
 	int bandwidth;
@@ -229,6 +230,9 @@ struct wpa_driver_nl80211_data {
 	int auth_wep_tx_keyidx;
 	int auth_local_state_change;
 	int auth_p2p;
+	bool auth_mld;
+	u8 auth_mld_link_id;
+	u8 auth_ap_mld_addr[ETH_ALEN];
 
 	/*
 	 * Tells whether the last scan issued from wpa_supplicant was a normal
@@ -276,7 +280,8 @@ int is_ap_interface(enum nl80211_iftype nlmode);
 int is_sta_interface(enum nl80211_iftype nlmode);
 int wpa_driver_nl80211_authenticate_retry(struct wpa_driver_nl80211_data *drv);
 int nl80211_get_link_signal(struct wpa_driver_nl80211_data *drv,
-			    const u8 *bssid, struct wpa_signal_info *sig);
+			    const u8 *bssid,
+			    struct hostap_sta_driver_data *data);
 int nl80211_get_link_noise(struct wpa_driver_nl80211_data *drv,
 			   struct wpa_signal_info *sig_change);
 int nl80211_get_wiphy_index(struct i802_bss *bss);

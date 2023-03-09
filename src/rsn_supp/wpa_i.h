@@ -106,8 +106,8 @@ struct wpa_sm {
 	int rsn_enabled; /* Whether RSN is enabled in configuration */
 	int mfp; /* 0 = disabled, 1 = optional, 2 = mandatory */
 	int ocv; /* Operating Channel Validation */
-	int sae_pwe; /* SAE PWE generation options */
 	int adaptive11r_key_mgmt;
+	enum sae_pwe sae_pwe; /* SAE PWE generation options */
 
 	unsigned int sae_pk:1; /* whether SAE-PK is used */
 	unsigned int secure_ltf:1;
@@ -151,6 +151,7 @@ struct wpa_sm {
 	size_t pmk_r1_len;
 	u8 pmk_r1_name[WPA_PMK_NAME_LEN];
 	u8 mobility_domain[MOBILITY_DOMAIN_ID_LEN];
+	u8 key_mobility_domain[MOBILITY_DOMAIN_ID_LEN];
 	u8 r0kh_id[FT_R0KH_ID_MAX_LEN];
 	size_t r0kh_id_len;
 	u8 r1kh_id[FT_R1KH_ID_LEN];
@@ -496,6 +497,14 @@ static inline int wpa_sm_set_ltf_keyseed(struct wpa_sm *sm, const u8 *own_addr,
 					ltf_keyseed_len, ltf_keyseed);
 }
 #endif /* CONFIG_PASN */
+
+static inline void
+wpa_sm_notify_pmksa_cache_entry(struct wpa_sm *sm,
+				struct rsn_pmksa_cache_entry *entry)
+{
+	if (sm->ctx->notify_pmksa_cache_entry)
+		sm->ctx->notify_pmksa_cache_entry(sm->ctx->ctx, entry);
+}
 
 int wpa_eapol_key_send(struct wpa_sm *sm, struct wpa_ptk *ptk,
 		       int ver, const u8 *dest, u16 proto,

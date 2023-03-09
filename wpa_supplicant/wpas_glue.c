@@ -952,28 +952,9 @@ const char * wpa_supplicant_ctrl_req_to_string(enum wpa_ctrl_req_type field,
 void wpas_send_ctrl_req(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 			const char *field_name, const char *txt)
 {
-	char *buf;
-	size_t buflen;
-	int len;
-
-	buflen = 100 + os_strlen(txt) + ssid->ssid_len;
-	buf = os_malloc(buflen);
-	if (buf == NULL)
-		return;
-	len = os_snprintf(buf, buflen, "%s-%d:%s needed for SSID ",
-			  field_name, ssid->id, txt);
-	if (os_snprintf_error(buflen, len)) {
-		os_free(buf);
-		return;
-	}
-	if (ssid->ssid && buflen > len + ssid->ssid_len) {
-		os_memcpy(buf + len, ssid->ssid, ssid->ssid_len);
-		len += ssid->ssid_len;
-		buf[len] = '\0';
-	}
-	buf[buflen - 1] = '\0';
-	wpa_msg(wpa_s, MSG_INFO, WPA_CTRL_REQ "%s", buf);
-	os_free(buf);
+	wpa_msg(wpa_s, MSG_INFO, WPA_CTRL_REQ "%s-%d:%s needed for SSID %s",
+		field_name, ssid->id, txt,
+		wpa_ssid_txt(ssid->ssid, ssid->ssid_len));
 }
 
 
@@ -1342,9 +1323,8 @@ static void disable_wpa_wpa2(struct wpa_ssid *ssid)
 }
 
 
-static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
+void wpas_transition_disable(struct wpa_supplicant *wpa_s, u8 bitmap)
 {
-	struct wpa_supplicant *wpa_s = _wpa_s;
 	struct wpa_ssid *ssid;
 	int changed = 0;
 
@@ -1427,13 +1407,20 @@ static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
 }
 
 
+static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
+{
+	struct wpa_supplicant *wpa_s = _wpa_s;
+	wpas_transition_disable(wpa_s, bitmap);
+}
+
+
 static void wpa_supplicant_store_ptk(void *ctx, u8 *addr, int cipher,
 				     u32 life_time, const struct wpa_ptk *ptk)
 {
 	struct wpa_supplicant *wpa_s = ctx;
 
 	ptksa_cache_add(wpa_s->ptksa, wpa_s->own_addr, addr, cipher, life_time,
-			ptk, NULL, NULL);
+			ptk, NULL, NULL, 0);
 }
 
 #endif /* CONFIG_NO_WPA */
@@ -1452,6 +1439,16 @@ static int wpa_supplicant_set_ltf_keyseed(void *_wpa_s, const u8 *own_addr,
 					      ltf_keyseed, 0);
 }
 #endif /* CONFIG_PASN */
+
+
+static void
+wpa_supplicant_notify_pmksa_cache_entry(void *_wpa_s,
+					struct rsn_pmksa_cache_entry *entry)
+{
+	struct wpa_supplicant *wpa_s = _wpa_s;
+
+	wpas_notify_pmk_cache_added(wpa_s, entry);
+}
 
 
 int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s)
@@ -1519,6 +1516,7 @@ int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s)
 #ifdef CONFIG_PASN
 	ctx->set_ltf_keyseed = wpa_supplicant_set_ltf_keyseed;
 #endif /* CONFIG_PASN */
+	ctx->notify_pmksa_cache_entry = wpa_supplicant_notify_pmksa_cache_entry;
 
 	wpa_s->wpa = wpa_sm_init(ctx);
 	if (wpa_s->wpa == NULL) {
