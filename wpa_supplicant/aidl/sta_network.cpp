@@ -2654,13 +2654,17 @@ ndk::ScopedAStatus StaNetwork::enableSaePkOnlyModeInternal(bool enable)
 
 ndk::ScopedAStatus StaNetwork::setMinimumTlsVersionEapPhase1ParamInternal(TlsVersion tlsVersion)
 {
+	if (tlsVersion < TlsVersion::TLS_V1_0 || tlsVersion > TlsVersion::TLS_V1_3) {
+		return createStatus(SupplicantStatusCode::FAILURE_ARGS_INVALID);
+	}
+	if (tlsVersion == TlsVersion::TLS_V1_0) {
+		// no restriction
+		return ndk::ScopedAStatus::ok();
+	}
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	std::string phase1_params;
 	if (wpa_ssid->eap.phase1 != NULL) {
 		phase1_params.append(wpa_ssid->eap.phase1);
-	}
-	if (tlsVersion < TlsVersion::TLS_V1_0) {
-		return createStatus(SupplicantStatusCode::FAILURE_ARGS_INVALID);
 	}
 	// Fallback to disable lower version TLS cascadingly.
 	switch (tlsVersion) {
@@ -2673,10 +2677,7 @@ ndk::ScopedAStatus StaNetwork::setMinimumTlsVersionEapPhase1ParamInternal(TlsVer
 		case TlsVersion::TLS_V1_1:
 			phase1_params.append("tls_disable_tlsv1_0=1");
 			FALLTHROUGH_INTENDED;
-		case TlsVersion::TLS_V1_0:
-			FALLTHROUGH_INTENDED;
 		default:
-			// no restriction
 			break;
 	}
 
