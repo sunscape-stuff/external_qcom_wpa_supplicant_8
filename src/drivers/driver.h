@@ -2186,10 +2186,6 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS2_AP_SME		0x0000000000000100ULL
 /** Driver handles SA Query procedures in AP mode */
 #define WPA_DRIVER_FLAGS2_SA_QUERY_OFFLOAD_AP	0x0000000000000200ULL
-/** Driver supports of adaptive 11r feature */
-#define WPA_DRIVER_FLAGS_ADAPTIVE_11R	        0x0000000000000200ULL
-/** Driver handles SA Query procedures in AP mode */
-#define WPA_DRIVER_FLAGS2_SA_QUERY_OFFLOAD_AP	0x0000000000000200ULL
 /** Driver supports background radar/CAC detection */
 #define WPA_DRIVER_RADAR_BACKGROUND		0x0000000000000400ULL
 /** Driver supports secure LTF in STA mode */
@@ -2204,6 +2200,8 @@ struct wpa_driver_capa {
 /** Driver supports MLO in station/AP mode */
 #define WPA_DRIVER_FLAGS2_MLO			0x0000000000004000ULL
 	u64 flags2;
+/** Driver supports of adaptive 11r feature */
+#define WPA_DRIVER_FLAGS_ADAPTIVE_11R	        0x8000000000000000ULL
 
 #define FULL_AP_CLIENT_STATE_SUPP(drv_flags) \
 	(drv_flags & WPA_DRIVER_FLAGS_FULL_AP_CLIENT_STATE)
