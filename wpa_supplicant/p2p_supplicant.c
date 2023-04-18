@@ -8433,6 +8433,7 @@ void wpas_p2p_pbc_overlap_cb(void *eloop_ctx, void *timeout_ctx)
 	wpas_p2p_notif_pbc_overlap(wpa_s);
 }
 
+
 void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s,
 				  enum wpas_p2p_channel_update_trig trig)
 {
