@@ -2757,6 +2757,7 @@ enum oper_chan_width op_class_to_ch_width(u8 op_class)
 	}
 }
 
+
 struct wpabuf * ieee802_11_defrag_data(const u8 *data, size_t len,
 				       bool ext_elem)
 {

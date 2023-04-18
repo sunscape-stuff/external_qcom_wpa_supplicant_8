@@ -2951,6 +2951,7 @@ void p2p_group_formation_failed(struct p2p_data *p2p)
 	p2p_clear_go_neg(p2p);
 }
 
+
 bool is_p2p_6ghz_disabled(struct p2p_data *p2p)
 {
 	if (p2p)
