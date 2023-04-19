@@ -2848,8 +2848,10 @@ static int wpa_supplicant_use_own_rsne_params(struct wpa_supplicant *wpa_s,
 		p += len;
 	}
 
-	if (!found || wpa_parse_wpa_ie(p, len, &ie) < 0)
+	if (!found || wpa_parse_wpa_ie(p, len, &ie) < 0) {
+		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_OCV, 0);
 		return 0;
+	}
 
 	wpa_hexdump(MSG_DEBUG,
 		    "WPA: Update cipher suite selection based on IEs in driver-generated WPA/RSNE in AssocReq",
@@ -2875,6 +2877,11 @@ static int wpa_supplicant_use_own_rsne_params(struct wpa_supplicant *wpa_s,
 			wpa_s, WLAN_REASON_AKMP_NOT_VALID);
 		return -1;
 	}
+
+	if (((wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) ||
+	     (wpa_s->drv_flags2 & WPA_DRIVER_FLAGS2_OCV)) && ssid->ocv)
+		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_OCV,
+				 !!(ie.capabilities & WPA_CAPABILITY_OCVC));
 
 	/*
 	 * Update PMK in wpa_sm and the driver if roamed to WPA/WPA2 PSK from a
@@ -3273,7 +3280,9 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_OWE
 	if (wpa_s->key_mgmt == WPA_KEY_MGMT_OWE &&
 	    (!bssid_known ||
-	     owe_process_assoc_resp(wpa_s->wpa, bssid,
+	     owe_process_assoc_resp(wpa_s->wpa,
+				    wpa_s->valid_links ?
+				    wpa_s->ap_mld_addr : bssid,
 				    data->assoc_info.resp_ies,
 				    data->assoc_info.resp_ies_len) < 0)) {
 		wpa_supplicant_deauthenticate(wpa_s, WLAN_REASON_UNSPECIFIED);
@@ -5131,7 +5140,10 @@ static void wpa_supplicant_event_assoc_auth(struct wpa_supplicant *wpa_s,
 					       data->assoc_info.fils_pmk,
 					       data->assoc_info.fils_pmk_len,
 					       data->assoc_info.fils_pmkid,
-					       wpa_s->bssid, fils_cache_id);
+					       wpa_s->valid_links ?
+					       wpa_s->ap_mld_addr :
+					       wpa_s->bssid,
+					       fils_cache_id);
 		} else if (data->assoc_info.fils_pmkid) {
 			/* Update the current PMKSA used for this connection */
 			pmksa_cache_set_current(wpa_s->wpa,
