@@ -172,6 +172,7 @@ static BIO* BIO_from_keystore(const char *alias)
 	BIO *bio = NULL;
 	uint8_t *value = NULL;
 	if (tls_global != NULL && certificate_callback_global != NULL) {
+		wpa_printf(MSG_INFO, "Retrieving certificate using callback");
 		int length = (*certificate_callback_global)(tls_global->cb_ctx, alias, &value);
 		if (length != -1 && (bio = BIO_new(BIO_s_mem())) != NULL)
 			BIO_write(bio, value, length);
@@ -3271,7 +3272,11 @@ static int tls_set_conn_flags(struct tls_connection *conn, unsigned int flags,
 		EC_KEY_free(ecdh);
 #endif
 	}
-	if (flags & (TLS_CONN_SUITEB | TLS_CONN_SUITEB_NO_ECDH)) {
+	if ((flags & (TLS_CONN_SUITEB | TLS_CONN_SUITEB_NO_ECDH))
+#ifdef EAP_TLSV1_3
+			&& (flags & TLS_CONN_DISABLE_TLSv1_3)
+#endif
+												 ) {
 #ifdef OPENSSL_IS_BORINGSSL
 		uint16_t sigalgs[1] = { SSL_SIGN_RSA_PKCS1_SHA384 };
 

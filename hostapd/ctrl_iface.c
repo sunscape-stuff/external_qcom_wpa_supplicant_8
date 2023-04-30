@@ -2639,6 +2639,7 @@ static int hostapd_ctrl_iface_mib(struct hostapd_data *hapd, char *reply,
 	return -1;
 }
 
+
 static int hostapd_ctrl_iface_vendor(struct hostapd_data *hapd, char *cmd,
 				     char *buf, size_t buflen)
 {

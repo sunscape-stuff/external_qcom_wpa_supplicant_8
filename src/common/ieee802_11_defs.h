@@ -2254,7 +2254,6 @@ struct ieee80211_he_operation {
 	 * Max Co-Hosted BSSID Indicator subfield (1 octet), and/or 6 GHz
 	 * Operation Information subfield (5 octets). */
 } STRUCT_PACKED;
-#define IEEE80211_HE_CAPAB_MIN_LEN (6 + 11)
 
 /* IEEE Std 802.11ax-2021, Figure 9-788k - 6 GHz Operation Information field */
 struct ieee80211_he_6ghz_oper_info {
@@ -2704,23 +2703,6 @@ enum ieee80211_eht_ml_sub_elem {
 	EHT_ML_SUB_ELEM_VENDOR = 221,
 	EHT_ML_SUB_ELEM_FRAGMENT = 254,
 };
-
-/*
- * STA Control field definitions of Per-STA Profile subelement in Basic
- * Multi-Link element as described in Figure 9-1002n: STA Control field format.
- */
-#define BASIC_MLE_STA_CTRL0_LINK_ID_SHIFT		0
-#define BASIC_MLE_STA_CTRL0_LINK_ID_MASK		0x0F
-#define BASIC_MLE_STA_CTRL0_COMPLETE_PROFILE		0x10
-#define BASIC_MLE_STA_CTRL0_PRES_STA_MAC		0x20
-#define BASIC_MLE_STA_CTRL0_PRES_BEACON_INT		0x40
-#define BASIC_MLE_STA_CTRL0_PRES_TSF_OFFSET		0x80
-#define BASIC_MLE_STA_CTRL1_PRES_DTIM_INFO		0x01
-#define BASIC_MLE_STA_CTRL1_PRES_NSTR_LINK_PAIR		0x02
-#define BASIC_MLE_STA_CTRL1_NSTR_BITMAP			0x04
-#define BASIC_MLE_STA_CTRL1_PRES_BSS_PARAM_COUNT	0x08
-
-#define BASIC_MLE_STA_PROF_STA_MAC_IDX			3
 
 /* IEEE P802.11ay/D4.0, 9.4.2.251 - EDMG Operation element */
 #define EDMG_BSS_OPERATING_CHANNELS_OFFSET	6
