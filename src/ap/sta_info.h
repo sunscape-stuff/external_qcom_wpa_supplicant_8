@@ -66,6 +66,7 @@ struct mbo_non_pref_chan_info {
 struct pending_eapol_rx {
 	struct wpabuf *buf;
 	struct os_reltime rx_time;
+	enum frame_encryption encrypted;
 };
 
 struct sta_info {
