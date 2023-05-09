@@ -525,6 +525,7 @@ static void wpas_sme_ml_auth(struct wpa_supplicant *wpa_s,
 {
 	struct ieee802_11_elems elems;
 	const u8 *mld_addr;
+	u16 status_code = data->auth.status_code;
 
 	if (!wpa_s->valid_links)
 		return;
@@ -538,7 +539,14 @@ static void wpas_sme_ml_auth(struct wpa_supplicant *wpa_s,
 
 	if (!elems.basic_mle || !elems.basic_mle_len) {
 		wpa_printf(MSG_DEBUG, "MLD: No ML element in authentication");
-		goto out;
+		if (status_code == WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ ||
+		    status_code == WLAN_STATUS_SUCCESS ||
+		    status_code == WLAN_STATUS_SAE_HASH_TO_ELEMENT ||
+		    status_code == WLAN_STATUS_SAE_PK)
+			goto out;
+		/* Accept missing Multi-Link element in failed authentication
+		 * cases. */
+		return;
 	}
 
 	mld_addr = get_basic_mle_mld_addr(elems.basic_mle, elems.basic_mle_len);
@@ -1596,7 +1604,8 @@ static int sme_check_sae_rejected_groups(struct wpa_supplicant *wpa_s,
 
 
 static int sme_external_ml_auth(struct wpa_supplicant *wpa_s,
-				const u8 *data, size_t len, int ie_offset)
+				const u8 *data, size_t len, int ie_offset,
+				u16 status_code)
 {
 	struct ieee802_11_elems elems;
 	const u8 *mld_addr;
@@ -1609,7 +1618,14 @@ static int sme_external_ml_auth(struct wpa_supplicant *wpa_s,
 
 	if (!elems.basic_mle || !elems.basic_mle_len) {
 		wpa_printf(MSG_DEBUG, "MLD: No ML element in authentication");
-		return -1;
+		if (status_code == WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ ||
+		    status_code == WLAN_STATUS_SUCCESS ||
+		    status_code == WLAN_STATUS_SAE_HASH_TO_ELEMENT ||
+		    status_code == WLAN_STATUS_SAE_PK)
+			return -1;
+		/* Accept missing Multi-Link element in failed authentication
+		 * cases. */
+		return 0;
 	}
 
 	mld_addr = get_basic_mle_mld_addr(elems.basic_mle, elems.basic_mle_len);
@@ -1715,7 +1731,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 						wpa_s->current_ssid, 2);
 		} else {
 			if (wpa_s->sme.ext_ml_auth &&
-			    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+			    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+						 status_code))
 				return -1;
 
 			sme_external_auth_send_sae_commit(
@@ -1742,7 +1759,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 						wpa_s->current_ssid, 1);
 		} else {
 			if (wpa_s->sme.ext_ml_auth &&
-			    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+			    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+						 status_code))
 				return -1;
 
 			sme_external_auth_send_sae_commit(
@@ -1841,7 +1859,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 						wpa_s->current_ssid, 0);
 		} else {
 			if (wpa_s->sme.ext_ml_auth &&
-			    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+			    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+						 status_code))
 				return -1;
 
 			sme_external_auth_send_sae_confirm(wpa_s, sa);
@@ -1857,7 +1876,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 				      ie_offset) < 0)
 			return -1;
 		if (external && wpa_s->sme.ext_ml_auth &&
-		    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+		    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+					 status_code))
 			return -1;
 
 		wpa_s->sme.sae.state = SAE_ACCEPTED;
