@@ -6366,6 +6366,7 @@ union wpa_event_data {
 	 * @data: Data starting with IEEE 802.1X header (!)
 	 * @data_len: Length of data
 	 * @ack: Indicates ack or lost frame
+	 * @link_id: MLD link id used to transmit the frame or -1 for non MLO
 	 *
 	 * This corresponds to hapd_send_eapol if the frame sent
 	 * there isn't just reported as EVENT_TX_STATUS.
@@ -6375,6 +6376,7 @@ union wpa_event_data {
 		const u8 *data;
 		int data_len;
 		int ack;
+		int link_id;
 	} eapol_tx_status;
 
 	/**
