@@ -4436,7 +4436,7 @@ out:
 }
 
 
-static bool hostapd_is_mld_ap(struct hostapd_data *hapd)
+bool hostapd_is_mld_ap(struct hostapd_data *hapd)
 {
 	if (!hapd->conf->mld_ap)
 		return false;
