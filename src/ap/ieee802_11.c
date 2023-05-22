@@ -4039,6 +4039,8 @@ static int __check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 		}
 #endif /* CONFIG_IEEE80211R_AP */
 
+		if (link)
+			goto skip_sae_owe;
 #ifdef CONFIG_SAE
 		if (wpa_auth_uses_sae(sta->wpa_sm) && sta->sae &&
 		    sta->sae->state == SAE_ACCEPTED)
@@ -4088,6 +4090,7 @@ static int __check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 				return resp;
 		}
 #endif /* CONFIG_OWE */
+	skip_sae_owe:
 
 #ifdef CONFIG_DPP2
 		dpp_pfs_free(sta->dpp_pfs);
