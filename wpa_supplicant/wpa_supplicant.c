@@ -70,6 +70,7 @@
 #include "ap/hostapd.h"
 #endif /* CONFIG_MESH */
 #include "aidl/aidl.h"
+#include "vendor_aidl/aidl_vendor.h"
 
 const char *const wpa_supplicant_version =
 "wpa_supplicant v" VERSION_STR "\n"
@@ -7955,6 +7956,12 @@ int wpa_supplicant_run(struct wpa_global *global)
 	if (!global->aidl)
 		return -1;
 #endif /* CONFIG_AIDL */
+
+#ifdef CONFIG_SUPPLICANT_VENDOR_AIDL
+	global->vendor_aidl = wpas_aidl_vendor_init(global);
+	if (!global->vendor_aidl)
+		return -1;
+#endif /* CONFIG_SUPPLICANT_VENDOR_AIDL */
 
 	eloop_register_signal_terminate(wpa_supplicant_terminate, global);
 	eloop_register_signal_reconfig(wpa_supplicant_reconfig, global);
