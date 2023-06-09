@@ -2570,6 +2570,7 @@ struct beacon_data {
  * @beacon_after: Next beacon/probe resp/asooc resp info
  * @counter_offset_beacon: Offset to the count field in beacon's tail
  * @counter_offset_presp: Offset to the count field in probe resp.
+ * @punct_bitmap - Preamble puncturing bitmap
  */
 struct csa_settings {
 	u8 cs_count;
@@ -2581,6 +2582,8 @@ struct csa_settings {
 
 	u16 counter_offset_beacon[2];
 	u16 counter_offset_presp[2];
+
+	u16 punct_bitmap;
 };
 
 /**
@@ -6288,6 +6291,7 @@ union wpa_event_data {
 	 * @cf1: Center frequency 1
 	 * @cf2: Center frequency 2
 	 * @link_id: Link ID of the MLO link
+	 * @punct_bitmap: Puncturing bitmap
 	 */
 	struct ch_switch {
 		int freq;
@@ -6297,6 +6301,7 @@ union wpa_event_data {
 		int cf1;
 		int cf2;
 		int link_id;
+		u16 punct_bitmap;
 	} ch_switch;
 
 	/**
