@@ -205,10 +205,12 @@ struct wpa_driver_nl80211_data {
 	u64 vendor_scan_cookie;
 	u64 remain_on_chan_cookie;
 	u64 send_frame_cookie;
+	int send_frame_link_id;
 #define MAX_SEND_FRAME_COOKIES 20
 	u64 send_frame_cookies[MAX_SEND_FRAME_COOKIES];
 	unsigned int num_send_frame_cookies;
 	u64 eapol_tx_cookie;
+	int eapol_tx_link_id;
 
 	unsigned int last_mgmt_freq;
 
@@ -325,6 +327,7 @@ int process_bss_event(struct nl_msg *msg, void *arg);
 const char * nl80211_iftype_str(enum nl80211_iftype mode);
 
 void nl80211_restore_ap_mode(struct i802_bss *bss);
+struct i802_link * nl80211_get_link(struct i802_bss *bss, s8 link_id);
 
 #ifdef ANDROID
 int android_nl_socket_set_nonblocking(struct nl_sock *handle);

@@ -1083,6 +1083,12 @@ int ap_sta_bind_vlan(struct hostapd_data *hapd, struct sta_info *sta)
 	struct hostapd_vlan *vlan = NULL;
 	int ret;
 	int old_vlanid = sta->vlan_id_bound;
+	int mld_link_id = -1;
+
+#ifdef CONFIG_IEEE80211BE
+	if (hapd->conf->mld_ap)
+		mld_link_id = hapd->mld_link_id;
+#endif /* CONFIG_IEEE80211BE */
 
 	if ((sta->flags & WLAN_STA_WDS) && sta->vlan_id == 0) {
 		wpa_printf(MSG_DEBUG,
@@ -1140,7 +1146,8 @@ skip_counting:
 	if (wpa_auth_sta_set_vlan(sta->wpa_sm, sta->vlan_id) < 0)
 		wpa_printf(MSG_INFO, "Failed to update VLAN-ID for WPA");
 
-	ret = hostapd_drv_set_sta_vlan(iface, hapd, sta->addr, sta->vlan_id);
+	ret = hostapd_drv_set_sta_vlan(iface, hapd, sta->addr, sta->vlan_id,
+				       mld_link_id);
 	if (ret < 0) {
 		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_DEBUG, "could not bind the STA "
@@ -1296,7 +1303,19 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 		return;
 
 	if (authorized) {
-		hostapd_prune_associations(hapd, sta->addr);
+		int mld_assoc_link_id = -1;
+
+#ifdef CONFIG_IEEE80211BE
+		if (hapd->conf->mld_ap && sta->mld_info.mld_sta) {
+			if (sta->mld_assoc_link_id == hapd->mld_link_id)
+				mld_assoc_link_id = sta->mld_assoc_link_id;
+			else
+				mld_assoc_link_id = -2;
+		}
+#endif /* CONFIG_IEEE80211BE */
+		if (mld_assoc_link_id != -2)
+			hostapd_prune_associations(hapd, sta->addr,
+						   mld_assoc_link_id);
 		sta->flags |= WLAN_STA_AUTHORIZED;
 	} else {
 		sta->flags &= ~WLAN_STA_AUTHORIZED;
