@@ -841,6 +841,11 @@ struct hostapd_freq_params {
 	 * eht_enabled - Whether EHT is enabled
 	 */
 	bool eht_enabled;
+
+	/**
+	 * link_id: If >=0 indicates the link of the AP MLD to configure
+	 */
+	int link_id;
 };
 
 /**
@@ -1767,6 +1772,16 @@ struct wpa_driver_ap_params {
 	 * The driver will use these to include RNR elements in EMA beacons.
 	 */
 	u8 **rnr_elem_offset;
+
+	/*
+	 * mld_ap - Whether operating as an AP MLD
+	 */
+	bool mld_ap;
+
+	/**
+	 * mld_link_id - Link id for MLD BSS's
+	 */
+	u8 mld_link_id;
 };
 
 struct wpa_driver_mesh_bss_params {

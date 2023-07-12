@@ -177,6 +177,12 @@ struct hostapd_data {
 	unsigned int reenable_beacon:1;
 
 	u8 own_addr[ETH_ALEN];
+	u8 mld_addr[ETH_ALEN];
+	u8 mld_link_id;
+	/* Used for mld_link_id assignment - valid on the first MLD BSS only */
+	u8 mld_next_link_id;
+
+	struct hostapd_data *mld_first_bss;
 
 	int num_sta; /* number of entries in sta_list */
 	struct sta_info *sta_list; /* STA info list head */
@@ -757,5 +763,7 @@ void fst_hostapd_fill_iface_obj(struct hostapd_data *hapd,
 int hostapd_set_acl(struct hostapd_data *hapd);
 struct hostapd_data * hostapd_mbssid_get_tx_bss(struct hostapd_data *hapd);
 int hostapd_mbssid_get_bss_index(struct hostapd_data *hapd);
+struct hostapd_data * hostapd_mld_get_link_bss(struct hostapd_data *hapd,
+					       u8 link_id);
 
 #endif /* HOSTAPD_H */

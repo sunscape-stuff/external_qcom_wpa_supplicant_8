@@ -47,7 +47,7 @@ int hostapd_sta_add(struct hostapd_data *hapd,
 		    size_t eht_capab_len,
 		    const struct ieee80211_he_6ghz_band_cap *he_6ghz_capab,
 		    u32 flags, u8 qosinfo, u8 vht_opmode, int supp_p2p_ps,
-		    int set);
+		    int set, const u8 *link_addr, bool mld_link_sta);
 int hostapd_set_privacy(struct hostapd_data *hapd, int enabled);
 int hostapd_set_generic_elem(struct hostapd_data *hapd, const u8 *elem,
 			     size_t elem_len);
@@ -435,5 +435,17 @@ hostapd_drv_register_frame(struct hostapd_data *hapd, u16 type,
 					    match_len, multicast);
 }
 #endif /* CONFIG_TESTING_OPTIONS */
+
+#ifdef CONFIG_IEEE80211BE
+static inline int hostapd_drv_link_add(struct hostapd_data *hapd,
+				       u8 link_id, const u8 *addr)
+{
+	if (!hapd->driver || !hapd->drv_priv || !hapd->driver->link_add)
+		return -1;
+
+	return hapd->driver->link_add(hapd->drv_priv, link_id, addr);
+
+}
+#endif /* CONFIG_IEEE80211BE */
 
 #endif /* AP_DRV_OPS */
