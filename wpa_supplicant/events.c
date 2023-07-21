@@ -3139,6 +3139,8 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 				resp_elems.he_capabilities;
 			wpa_s->connection_eht = req_elems.eht_capabilities &&
 				resp_elems.eht_capabilities;
+			if (req_elems.rrm_enabled)
+				wpa_s->rrm.rrm_used = 1;
 
 			int max_nss_rx_req = get_max_nss_capability(&req_elems, 1);
 			int max_nss_rx_resp = get_max_nss_capability(&resp_elems, 1);
