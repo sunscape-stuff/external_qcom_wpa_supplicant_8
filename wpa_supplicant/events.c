@@ -3139,6 +3139,8 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 				resp_elems.he_capabilities;
 			wpa_s->connection_eht = req_elems.eht_capabilities &&
 				resp_elems.eht_capabilities;
+			if (req_elems.rrm_enabled)
+				wpa_s->rrm.rrm_used = 1;
 
 			int max_nss_rx_req = get_max_nss_capability(&req_elems, 1);
 			int max_nss_rx_resp = get_max_nss_capability(&resp_elems, 1);
@@ -3660,8 +3662,8 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 		hostapd_notif_assoc(wpa_s->ap_iface->bss[0],
 				    data->assoc_info.addr,
 				    data->assoc_info.req_ies,
-				    data->assoc_info.req_ies_len,
-				    data->assoc_info.reassoc);
+				    data->assoc_info.req_ies_len, NULL, 0,
+				    NULL, data->assoc_info.reassoc);
 		return;
 	}
 #endif /* CONFIG_AP */
@@ -5436,6 +5438,7 @@ static void wpas_tid_link_map(struct wpa_supplicant *wpa_s,
 		}
 	}
 
+	wpas_notify_mlo_info_change_reason(wpa_s, MLO_TID_TO_LINK_MAP);
 	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_T2LM_UPDATE "%s", map_info);
 }
 
@@ -5473,6 +5476,7 @@ static void wpas_link_reconfig(struct wpa_supplicant *wpa_s)
 		return;
 	}
 
+	wpas_notify_mlo_info_change_reason(wpa_s, MLO_LINK_RECONFIG_AP_REMOVAL);
 	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_LINK_RECONFIG "valid_links=0x%x",
 		wpa_s->valid_links);
 }

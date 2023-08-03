@@ -841,6 +841,11 @@ struct hostapd_freq_params {
 	 * eht_enabled - Whether EHT is enabled
 	 */
 	bool eht_enabled;
+
+	/**
+	 * link_id: If >=0 indicates the link of the AP MLD to configure
+	 */
+	int link_id;
 };
 
 /**
@@ -1745,6 +1750,38 @@ struct wpa_driver_ap_params {
 	 * subchannel is punctured, otherwise active.
 	 */
 	u16 punct_bitmap;
+
+	/**
+	 * rnr_elem - This buffer contains all of reduced neighbor report (RNR)
+	 * elements
+	 */
+	u8 *rnr_elem;
+
+	/**
+	 * rnr_elem_len - Length of rnr_elem buffer
+	 */
+	size_t rnr_elem_len;
+
+	/**
+	 * rnr_elem_count - Number of RNR elements
+	 */
+	unsigned int rnr_elem_count;
+
+	/**
+	 * rnr_elem_offset - The offsets to the elements in rnr_elem.
+	 * The driver will use these to include RNR elements in EMA beacons.
+	 */
+	u8 **rnr_elem_offset;
+
+	/*
+	 * mld_ap - Whether operating as an AP MLD
+	 */
+	bool mld_ap;
+
+	/**
+	 * mld_link_id - Link id for MLD BSS's
+	 */
+	u8 mld_link_id;
 };
 
 struct wpa_driver_mesh_bss_params {
@@ -3238,12 +3275,13 @@ struct wpa_driver_ops {
 	 * @no_encrypt: Do not encrypt frame even if appropriate key exists
 	 *	(used only for testing purposes)
 	 * @wait: Time to wait off-channel for a response (in ms), or zero
+	 * @link_id: Link ID to use for TX, or -1 if not set
 	 * Returns: 0 on success, -1 on failure
 	 */
 	int (*send_mlme)(void *priv, const u8 *data, size_t data_len,
 			 int noack, unsigned int freq, const u16 *csa_offs,
 			 size_t csa_offs_len, int no_encrypt,
-			 unsigned int wait);
+			 unsigned int wait, int link_id);
 
 	/**
 	 * update_ft_ies - Update FT (IEEE 802.11r) IEs
@@ -3505,6 +3543,7 @@ struct wpa_driver_ops {
 	 * @buf: Frame payload starting from IEEE 802.1X header
 	 * @len: Frame payload length
 	 * @no_encrypt: Do not encrypt frame
+	 * @link_id: Link ID to use for TX, or -1 if not set
 	 *
 	 * Returns 0 on success, else an error
 	 *
@@ -3522,7 +3561,7 @@ struct wpa_driver_ops {
 	 */
 	int (*tx_control_port)(void *priv, const u8 *dest,
 			       u16 proto, const u8 *buf, size_t len,
-			       int no_encrypt);
+			       int no_encrypt, int link_id);
 
 	/**
 	 * hapd_send_eapol - Send an EAPOL packet (AP only)
@@ -3533,26 +3572,28 @@ struct wpa_driver_ops {
 	 * @encrypt: Whether the frame should be encrypted
 	 * @own_addr: Source MAC address
 	 * @flags: WPA_STA_* flags for the destination station
+	 * @link_id: Link ID to use for TX, or -1 if not set
 	 *
 	 * Returns: 0 on success, -1 on failure
 	 */
 	int (*hapd_send_eapol)(void *priv, const u8 *addr, const u8 *data,
 			       size_t data_len, int encrypt,
-			       const u8 *own_addr, u32 flags);
+			       const u8 *own_addr, u32 flags, int link_id);
 
 	/**
 	 * sta_deauth - Deauthenticate a station (AP only)
 	 * @priv: Private driver interface data
 	 * @own_addr: Source address and BSSID for the Deauthentication frame
 	 * @addr: MAC address of the station to deauthenticate
-	 * @reason: Reason code for the Deauthentiation frame
+	 * @reason: Reason code for the Deauthentication frame
+	 * @link_id: Link ID to use for Deauthentication frame, or -1 if not set
 	 * Returns: 0 on success, -1 on failure
 	 *
 	 * This function requests a specific station to be deauthenticated and
 	 * a Deauthentication frame to be sent to it.
 	 */
 	int (*sta_deauth)(void *priv, const u8 *own_addr, const u8 *addr,
-			  u16 reason);
+			  u16 reason, int link_id);
 
 	/**
 	 * sta_disassoc - Disassociate a station (AP only)
@@ -3701,9 +3742,10 @@ struct wpa_driver_ops {
 	 * @cw_min: cwMin
 	 * @cw_max: cwMax
 	 * @burst_time: Maximum length for bursting in 0.1 msec units
+	 * @link_id: Link ID to use, or -1 for non MLD.
 	 */
 	int (*set_tx_queue_params)(void *priv, int queue, int aifs, int cw_min,
-				   int cw_max, int burst_time);
+				   int cw_max, int burst_time, int link_id);
 
 	/**
 	 * if_add - Add a virtual interface
@@ -3746,6 +3788,7 @@ struct wpa_driver_ops {
 	 * @ifname: Interface (main or virtual BSS or VLAN)
 	 * @addr: MAC address of the associated station
 	 * @vlan_id: VLAN ID
+	 * @link_id: The link ID or -1 for non-MLO
 	 * Returns: 0 on success, -1 on failure
 	 *
 	 * This function is used to bind a station to a specific virtual
@@ -3755,7 +3798,7 @@ struct wpa_driver_ops {
 	 * domains to be used with a single BSS.
 	 */
 	int (*set_sta_vlan)(void *priv, const u8 *addr, const char *ifname,
-			    int vlan_id);
+			    int vlan_id, int link_id);
 
 	/**
 	 * commit - Optional commit changes handler (AP only)
@@ -4835,6 +4878,17 @@ struct wpa_driver_ops {
 			     unsigned int *ext_capab_len);
 
 	/**
+	 * get_mld_capab - Get MLD capabilities for the specified interface
+	 * @priv: Private driver interface data
+	 * @type: Interface type for which to get MLD capabilities
+	 * @eml_capa: EML capabilities
+	 * @mld_capa_and_ops: MLD Capabilities and Operations
+	 * Returns: 0 on success or -1 on failure
+	 */
+	int (*get_mld_capab)(void *priv, enum wpa_driver_if_type type,
+			     u16 *eml_capa, u16 *mld_capa_and_ops);
+
+	/**
 	 * p2p_lo_start - Start offloading P2P listen to device
 	 * @priv: Private driver interface data
 	 * @freq: Listening frequency (MHz) for P2P listen
@@ -5900,6 +5954,17 @@ union wpa_event_data {
 		 * fils_pmkid - PMKID used or generated in FILS authentication
 		 */
 		const u8 *fils_pmkid;
+
+		/**
+		 * link_addr - Link address of the STA
+		 */
+		const u8 *link_addr;
+
+		/**
+		 * assoc_link_id - Association link id of the MLO association or
+		 *	-1 if MLO is not used
+		 */
+		int assoc_link_id;
 	} assoc_info;
 
 	/**
@@ -6135,6 +6200,7 @@ union wpa_event_data {
 		const u8 *data;
 		size_t data_len;
 		int ack;
+		int link_id;
 	} tx_status;
 
 	/**
@@ -6352,6 +6418,7 @@ union wpa_event_data {
 	 * @data: Data starting with IEEE 802.1X header (!)
 	 * @data_len: Length of data
 	 * @ack: Indicates ack or lost frame
+	 * @link_id: MLD link id used to transmit the frame or -1 for non MLO
 	 *
 	 * This corresponds to hapd_send_eapol if the frame sent
 	 * there isn't just reported as EVENT_TX_STATUS.
@@ -6361,6 +6428,7 @@ union wpa_event_data {
 		const u8 *data;
 		int data_len;
 		int ack;
+		int link_id;
 	} eapol_tx_status;
 
 	/**
@@ -6546,6 +6614,8 @@ union wpa_event_data {
 		const u8 *peer;
 		const u8 *ie;
 		size_t ie_len;
+		int assoc_link_id;
+		const u8 *link_addr;
 	} update_dh;
 
 	/**
@@ -6616,15 +6686,21 @@ void wpa_supplicant_event_global(void *ctx, enum wpa_event_type event,
  * event indication for some of the common events.
  */
 
-static inline void drv_event_assoc(void *ctx, const u8 *addr, const u8 *ie,
-				   size_t ielen, int reassoc)
+static inline void drv_event_assoc(void *ctx, const u8 *addr, const u8 *req_ies,
+				   size_t req_ielen, const u8 *resp_ies,
+				   size_t resp_ielen, const u8 *link_addr,
+				   int assoc_link_id, int reassoc)
 {
 	union wpa_event_data event;
 	os_memset(&event, 0, sizeof(event));
 	event.assoc_info.reassoc = reassoc;
-	event.assoc_info.req_ies = ie;
-	event.assoc_info.req_ies_len = ielen;
+	event.assoc_info.req_ies = req_ies;
+	event.assoc_info.req_ies_len = req_ielen;
+	event.assoc_info.resp_ies = resp_ies;
+	event.assoc_info.resp_ies_len = resp_ielen;
 	event.assoc_info.addr = addr;
+	event.assoc_info.link_addr = link_addr;
+	event.assoc_info.assoc_link_id = assoc_link_id;
 	wpa_supplicant_event(ctx, EVENT_ASSOC, &event);
 }
 
