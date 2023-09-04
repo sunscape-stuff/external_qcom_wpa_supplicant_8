@@ -2894,6 +2894,7 @@ enum dscp_policy_request_type {
 /* Wi-Fi Alliance Capabilities element - Capabilities field */
 #define WFA_CAPA_QM_DSCP_POLICY BIT(0)
 #define WFA_CAPA_QM_UNSOLIC_DSCP BIT(1)
+#define WFA_CAPA_QM_NON_EHT_SCS_TRAFFIC_DESC BIT(2)
 
 #if defined(CONFIG_DRIVER_NL80211_BRCM) || defined(CONFIG_DRIVER_NL80211_SYNA)
 #define WPA_KEY_MGMT_CROSS_AKM_ROAM (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_PSK)
