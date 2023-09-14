@@ -1699,7 +1699,7 @@ static int hostapd_ctrl_iface_eapol_rx(struct hostapd_data *hapd, char *cmd)
 		return -1;
 	}
 
-	ieee802_1x_receive(hapd, src, buf, len);
+	ieee802_1x_receive(hapd, src, buf, len, FRAME_ENCRYPTION_UNKNOWN);
 	os_free(buf);
 
 	return 0;
@@ -1822,6 +1822,7 @@ static int hostapd_ctrl_iface_data_test_config(struct hostapd_data *hapd,
 	int enabled = atoi(cmd);
 	char *pos;
 	const char *ifname;
+	const u8 *addr = hapd->own_addr;
 
 	if (!enabled) {
 		if (hapd->l2_test) {
@@ -1842,7 +1843,11 @@ static int hostapd_ctrl_iface_data_test_config(struct hostapd_data *hapd,
 	else
 		ifname = hapd->conf->iface;
 
-	hapd->l2_test = l2_packet_init(ifname, hapd->own_addr,
+#ifdef CONFIG_IEEE80211BE
+	if (hapd->conf->mld_ap)
+		addr = hapd->mld_addr;
+#endif /* CONFIG_IEEE80211BE */
+	hapd->l2_test = l2_packet_init(ifname, addr,
 					ETHERTYPE_IP, hostapd_data_test_rx,
 					hapd, 1);
 	if (hapd->l2_test == NULL)
