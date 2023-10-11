@@ -1542,10 +1542,14 @@ StaIface::startDppConfiguratorInitiatorInternal(
 	cmd += " conf=";
 	cmd += role;
 
+#ifdef CONFIG_AIDL_DPP_VERSION
+	dpp_version_override = 1;
+#else
 	if (net_role == DppNetRole::STA) {
 		/* DPP R2 connection status request */
 		cmd += " conn_status=1";
 	}
+#endif /* CONFIG_AIDL_DPP_VERSION */
 
 	if (security_akm == DppAkm::DPP) {
 		if (!privEcKey.empty()) {
@@ -1597,6 +1601,10 @@ ndk::ScopedAStatus StaIface::startDppEnrolleeInitiatorInternal(
 
 	wpa_printf(MSG_DEBUG,
 		   "DPP initiator command: %s", cmd.c_str());
+
+#ifdef CONFIG_AIDL_DPP_VERSION
+	dpp_version_override = 1;
+#endif /* CONFIG_AIDL_DPP_VERSION */
 
 	if (wpas_dpp_auth_init(wpa_s, cmd.c_str()) == 0) {
 		return ndk::ScopedAStatus::ok();
@@ -1688,6 +1696,10 @@ ndk::ScopedAStatus StaIface::startDppEnrolleeResponderInternal(uint32_t listen_c
 
 	wpa_printf(MSG_DEBUG,
 		   "DPP Enrollee Responder command: %s", cmd.c_str());
+
+#ifdef CONFIG_AIDL_DPP_VERSION
+	dpp_version_override = 1;
+#endif /* CONFIG_AIDL_DPP_VERSION */
 
 	if (wpas_dpp_listen(wpa_s, cmd.c_str()) == 0) {
 		return ndk::ScopedAStatus::ok();
