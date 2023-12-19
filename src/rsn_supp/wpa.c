@@ -4569,6 +4569,9 @@ int wpa_sm_set_param(struct wpa_sm *sm, enum wpa_sm_conf_params param,
 #endif /* CONFIG_DPP2 */
 	case WPA_PARAM_ADAPT_FT_KEY_MGMT:
 		sm->adaptive11r_key_mgmt = value;
+                break;
+	case WPA_PARAM_WMM_ENABLED:
+		sm->wmm_enabled = value;
 		break;
 	default:
 		break;

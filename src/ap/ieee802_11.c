@@ -2572,6 +2572,7 @@ static void hapd_initialize_pasn(struct hostapd_data *hapd,
 	pasn->cb_ctx = hapd;
 	pasn->send_mgmt = hapd_pasn_send_mlme;
 	pasn->pasn_groups = hapd->conf->pasn_groups;
+	pasn->noauth = hapd->conf->pasn_noauth;
 	pasn->wpa_key_mgmt = hapd->conf->wpa_key_mgmt;
 	pasn->rsn_pairwise = hapd->conf->rsn_pairwise;
 	pasn->derive_kdk = hapd->iface->drv_flags2 &
@@ -3853,7 +3854,7 @@ static int __check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 		if (resp != WLAN_STATUS_SUCCESS)
 			return resp;
 
-		resp = set_sta_vht_opmode(hapd, sta, elems->vht_opmode_notif);
+		resp = set_sta_vht_opmode(hapd, sta, elems->opmode_notif);
 		if (resp != WLAN_STATUS_SUCCESS)
 			return resp;
 	}
@@ -6462,7 +6463,11 @@ static void handle_assoc_cb(struct hostapd_data *hapd,
 		sta->flags |= WLAN_STA_WDS;
 	}
 
-	if (sta->flags & (WLAN_STA_WDS | WLAN_STA_MULTI_AP)) {
+	/* WPS not supported on backhaul BSS. Disable 4addr mode on fronthaul */
+	if ((sta->flags & WLAN_STA_WDS) ||
+	    (sta->flags & WLAN_STA_MULTI_AP &&
+	     !(hapd->conf->multi_ap & FRONTHAUL_BSS) &&
+	     !(sta->flags & WLAN_STA_WPS))) {
 		int ret;
 		char ifname_wds[IFNAMSIZ + 1];
 
@@ -7054,7 +7059,7 @@ u8 * hostapd_eid_wb_chsw_wrapper(struct hostapd_data *hapd, u8 *eid)
 	     !hapd->cs_freq_params.eht_enabled))
 		return eid;
 
-	/* bandwidth: 0: 40, 1: 80, 2: 160, 3: 80+80 */
+	/* bandwidth: 0: 40, 1: 80, 2: 160, 3: 80+80, 4: 320 */
 	switch (hapd->cs_freq_params.bandwidth) {
 	case 40:
 		bw = 0;
@@ -7068,6 +7073,9 @@ u8 * hostapd_eid_wb_chsw_wrapper(struct hostapd_data *hapd, u8 *eid)
 		break;
 	case 160:
 		bw = 2;
+		break;
+	case 320:
+		bw = 4;
 		break;
 	default:
 		/* not valid VHT bandwidth or not in CSA */
@@ -7086,9 +7094,9 @@ u8 * hostapd_eid_wb_chsw_wrapper(struct hostapd_data *hapd, u8 *eid)
 				   &chan2) != HOSTAPD_MODE_IEEE80211A)
 		return eid;
 
-	*eid++ = WLAN_EID_VHT_CHANNEL_SWITCH_WRAPPER;
+	*eid++ = WLAN_EID_CHANNEL_SWITCH_WRAPPER;
 	*eid++ = 5; /* Length of Channel Switch Wrapper */
-	*eid++ = WLAN_EID_VHT_WIDE_BW_CHSWITCH;
+	*eid++ = WLAN_EID_WIDE_BW_CHSWITCH;
 	*eid++ = 3; /* Length of Wide Bandwidth Channel Switch element */
 	*eid++ = bw; /* New Channel Width */
 	*eid++ = chan1; /* New Channel Center Frequency Segment 0 */
@@ -7291,7 +7299,8 @@ size_t hostapd_eid_rnr_len(struct hostapd_data *hapd, u32 type)
 				hostapd_eid_rnr_multi_iface_len(hapd,
 								&current_len);
 
-		if (hapd->conf->rnr && hapd->iface->num_bss > 1)
+		if (hapd->conf->rnr && hapd->iface->num_bss > 1 &&
+		    !hapd->iconf->mbssid)
 			total_len += hostapd_eid_rnr_iface_len(hapd, hapd,
 							       &current_len,
 							       NULL);
@@ -7535,7 +7544,8 @@ u8 * hostapd_eid_rnr(struct hostapd_data *hapd, u8 *eid, u32 type)
 			eid = hostapd_eid_rnr_multi_iface(hapd, eid,
 							  &current_len);
 
-		if (hapd->conf->rnr && hapd->iface->num_bss > 1)
+		if (hapd->conf->rnr && hapd->iface->num_bss > 1 &&
+		    !hapd->iconf->mbssid)
 			eid = hostapd_eid_rnr_iface(hapd, hapd, eid,
 						    &current_len, NULL);
 		break;
