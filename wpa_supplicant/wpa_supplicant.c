@@ -1588,6 +1588,7 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	int sel, proto;
 	enum sae_pwe sae_pwe;
 	const u8 *bss_wpa, *bss_rsn, *bss_rsnx, *bss_osen, *adaptive_11r_ie;
+	bool wmm;
 
 	if (bss) {
 		bss_wpa = wpa_bss_get_vendor_ie(bss, WPA_IE_VENDOR_TYPE);
@@ -2009,6 +2010,22 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_EXT_KEY_ID, 0);
 		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_USE_EXT_KEY_ID, 0);
 	}
+
+	/* Mark WMM enabled for any HT/VHT/HE/EHT association to get more
+	 * appropriate advertisement of the supported number of PTKSA receive
+	 * counters. In theory, this could be based on a driver capability, but
+	 * in practice all cases using WMM support at least eight replay
+	 * counters, so use a hardcoded value for now since there is no explicit
+	 * driver capability indication for this.
+	 *
+	 * In addition, claim WMM to be enabled if the AP supports it since it
+	 * is far more likely for any current device to support WMM. */
+	wmm = wpa_s->connection_set &&
+		(wpa_s->connection_ht || wpa_s->connection_vht ||
+		 wpa_s->connection_he || wpa_s->connection_eht);
+	if (!wmm && bss)
+		wmm = wpa_bss_get_vendor_ie(bss, WMM_IE_VENDOR_TYPE);
+	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_WMM_ENABLED, wmm);
 
 	if (!skip_default_rsne) {
 		if (wpa_sm_set_assoc_wpa_ie_default(wpa_s->wpa, wpa_ie,
@@ -3337,7 +3354,7 @@ static u8 * wpas_populate_assoc_ies(
 #endif /* CONFIG_FILS */
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, addr,
 					    ssid, try_opportunistic,
-					    cache_id, 0) == 0) {
+					    cache_id, 0, false) == 0) {
 			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
 #if defined(CONFIG_SAE) || defined(CONFIG_FILS)
 			pmksa_cached = 1;
@@ -4892,7 +4909,8 @@ void wpa_supplicant_select_network(struct wpa_supplicant *wpa_s,
 		wpa_s->current_ssid = ssid;
 		eapol_sm_notify_config(wpa_s->eapol, NULL, NULL);
 		wpa_s->connect_without_scan =
-			(ssid->mode == WPAS_MODE_MESH) ? ssid : NULL;
+			(ssid->mode == WPAS_MODE_MESH ||
+			 ssid->mode == WPAS_MODE_AP) ? ssid : NULL;
 
 		/*
 		 * Don't optimize next scan freqs since a new ESS has been
@@ -7203,6 +7221,9 @@ static int wpa_supplicant_init_iface(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_PASN
 	wpa_pasn_sm_set_caps(wpa_s->wpa, wpa_s->drv_flags2);
 #endif /* CONFIG_PASN */
+	wpa_sm_set_driver_bss_selection(wpa_s->wpa,
+					!!(wpa_s->drv_flags &
+					   WPA_DRIVER_FLAGS_BSS_SELECTION));
 	if (wpa_s->max_remain_on_chan == 0)
 		wpa_s->max_remain_on_chan = 1000;
 

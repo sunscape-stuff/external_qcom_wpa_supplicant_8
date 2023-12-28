@@ -60,6 +60,10 @@
 static int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s,
 					      int new_scan, int own_request);
 #endif /* CONFIG_NO_SCAN_PROCESSING */
+#ifdef CONFIG_OWE
+static void owe_trans_ssid(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
+			   const u8 **ret_ssid, size_t *ret_ssid_len);
+#endif /* CONFIG_OWE */
 
 
 int wpas_temp_disabled(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
@@ -187,6 +191,7 @@ static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s,
 					union wpa_event_data *data)
 {
 	struct wpa_ssid *ssid, *old_ssid;
+	struct wpa_bss *bss;
 	u8 drv_ssid[SSID_MAX_LEN];
 	size_t drv_ssid_len;
 	int res;
@@ -210,6 +215,14 @@ static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s,
 			return 0; /* current profile still in use */
 
 #ifdef CONFIG_OWE
+		if (wpa_s->current_bss &&
+		    !(wpa_s->current_bss->flags & WPA_BSS_OWE_TRANSITION)) {
+			const u8 *match_ssid;
+			size_t match_ssid_len;
+
+			owe_trans_ssid(wpa_s, wpa_s->current_bss,
+				       &match_ssid, &match_ssid_len);
+		}
 		if ((wpa_s->current_ssid->key_mgmt & WPA_KEY_MGMT_OWE) &&
 		    wpa_s->current_bss &&
 		    (wpa_s->current_bss->flags & WPA_BSS_OWE_TRANSITION) &&
@@ -254,6 +267,7 @@ static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s,
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "Network configuration found for the "
 		"current AP");
+	bss = wpa_supplicant_update_current_bss(wpa_s, wpa_s->bssid);
 	if (wpa_key_mgmt_wpa_any(ssid->key_mgmt)) {
 		u8 wpa_ie[80];
 		size_t wpa_ie_len = sizeof(wpa_ie);
@@ -263,7 +277,7 @@ static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s,
 		 * driver indicated the actual values used in the
 		 * (Re)Association Request frame. */
 		skip_default_rsne = data && data->assoc_info.req_ies;
-		if (wpa_supplicant_set_suites(wpa_s, NULL, ssid,
+		if (wpa_supplicant_set_suites(wpa_s, bss, ssid,
 					      wpa_ie, &wpa_ie_len,
 					      skip_default_rsne) < 0)
 			wpa_dbg(wpa_s, MSG_DEBUG, "Could not set WPA suites");
@@ -275,8 +289,6 @@ static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s,
 		eapol_sm_invalidate_cached_session(wpa_s->eapol);
 	old_ssid = wpa_s->current_ssid;
 	wpa_s->current_ssid = ssid;
-
-	wpa_supplicant_update_current_bss(wpa_s, wpa_s->bssid);
 
 	wpa_supplicant_rsn_supp_set_config(wpa_s, wpa_s->current_ssid);
 	wpa_supplicant_initiate_eapol(wpa_s);
@@ -415,7 +427,8 @@ static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s, bool authorized)
 	for (i = 0; i < ie.num_pmkid; i++) {
 		pmksa_set = pmksa_cache_set_current(wpa_s->wpa,
 						    ie.pmkid + i * PMKID_LEN,
-						    NULL, NULL, 0, NULL, 0);
+						    NULL, NULL, 0, NULL, 0,
+						    true);
 		if (pmksa_set == 0) {
 			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
 			if (authorized)
@@ -1827,6 +1840,7 @@ int wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 			   struct wpa_bss *selected,
 			   struct wpa_ssid *ssid)
 {
+#ifdef IEEE8021X_EAPOL
 	if ((eap_is_wps_pbc_enrollee(&ssid->eap) &&
 	     wpas_wps_partner_link_overlap_detect(wpa_s)) ||
 	    wpas_wps_scan_pbc_overlap(wpa_s, selected, ssid)) {
@@ -1849,6 +1863,7 @@ int wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_WPS */
 		return -1;
 	}
+#endif /* IEEE8021X_EAPOL */
 
 	wpa_msg(wpa_s, MSG_DEBUG,
 		"Considering connect request: reassociate: %d  selected: "
@@ -5158,7 +5173,7 @@ static void wpa_supplicant_event_assoc_auth(struct wpa_supplicant *wpa_s,
 			/* Update the current PMKSA used for this connection */
 			pmksa_cache_set_current(wpa_s->wpa,
 						data->assoc_info.fils_pmkid,
-						NULL, NULL, 0, NULL, 0);
+						NULL, NULL, 0, NULL, 0, true);
 		}
 	}
 #endif /* CONFIG_FILS */

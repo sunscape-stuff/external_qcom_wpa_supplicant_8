@@ -221,6 +221,9 @@ struct wpa_sm {
 	int dpp_pfs;
 #endif /* CONFIG_DPP2 */
 	struct wpa_sm_mlo mlo;
+
+	bool driver_bss_selection;
+	bool wmm_enabled;
 };
 
 
