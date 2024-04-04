@@ -1301,6 +1301,7 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 	u8 addr[ETH_ALEN];
 	u8 ip_addr_buf[4];
 #endif /* CONFIG_P2P */
+	u8 *ip_ptr = NULL;
 
 	if (!!authorized == !!(sta->flags & WLAN_STA_AUTHORIZED))
 		return;
@@ -1339,10 +1340,6 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 #endif /* CONFIG_P2P */
 		os_snprintf(buf, sizeof(buf), MACSTR, MAC2STR(sta->addr));
 
-	if (hapd->sta_authorized_cb)
-		hapd->sta_authorized_cb(hapd->sta_authorized_cb_ctx,
-					sta->addr, authorized, dev_addr);
-
 	if (authorized) {
 		const u8 *dpp_pkhash;
 		const char *keyid;
@@ -1359,6 +1356,7 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 				    " ip_addr=%u.%u.%u.%u",
 				    ip_addr_buf[0], ip_addr_buf[1],
 				    ip_addr_buf[2], ip_addr_buf[3]);
+			ip_ptr = ip_addr_buf;
 		}
 #endif /* CONFIG_P2P */
 
@@ -1397,6 +1395,11 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 			wpa_msg_no_global(hapd->msg_ctx_parent, MSG_INFO,
 					  AP_STA_DISCONNECTED "%s", buf);
 	}
+
+	if (hapd->sta_authorized_cb)
+		hapd->sta_authorized_cb(hapd->sta_authorized_cb_ctx,
+					sta->addr, authorized, dev_addr,
+					ip_ptr);
 
 #ifdef CONFIG_FST
 	if (hapd->iface->fst) {

@@ -1923,8 +1923,13 @@ LOCAL_C_INCLUDES := $(INCLUDES)
 include $(BUILD_EXECUTABLE)
 
 ########################
+# Build wpa_supplicant
+#
+# $(1): if defined build wpa_supplicant with macsec support (with different executable name wpa_supplicant_macsec
+#
+define wpa_supplicant_gen
+
 include $(CLEAR_VARS)
-LOCAL_MODULE := wpa_supplicant
 LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
 LOCAL_LICENSE_CONDITIONS := notice unencumbered
 LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../LICENSE
@@ -1957,14 +1962,19 @@ else
 LOCAL_STATIC_LIBRARIES += libnl_2
 endif
 endif
-LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS)
 LOCAL_C_INCLUDES := $(INCLUDES)
 ifeq ($(DBUS), y)
 LOCAL_SHARED_LIBRARIES += libdbus
 endif
+
+ifneq ($(1),)
+# wpa_supplicant for wifi
+LOCAL_CFLAGS := $(L_CFLAGS)
+LOCAL_MODULE := wpa_supplicant
+
 ifeq ($(WPA_SUPPLICANT_USE_AIDL), y)
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant-V2-ndk
+LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant-V3-ndk
 LOCAL_SHARED_LIBRARIES += android.system.keystore2-V1-ndk
 LOCAL_SHARED_LIBRARIES += libutils libbase
 LOCAL_SHARED_LIBRARIES += libbinder_ndk
@@ -1973,11 +1983,42 @@ LOCAL_VINTF_FRAGMENTS := aidl/android.hardware.wifi.supplicant.xml
 ifeq ($(SUPPLICANT_VENDOR_AIDL), y)
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant-V1-ndk
 endif
+LOCAL_MIN_SDK_VERSION := 34
 ifeq ($(WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY), true)
 LOCAL_INIT_RC=aidl/android.hardware.wifi.supplicant-service.rc
 endif
 endif
+
+else
+# wpa_supplicant for macsec
+# remove aidl control interface, standalone
+LOCAL_CFLAGS := $(patsubst -DCONFIG_CTRL_IFACE_AIDL,,$(patsubst -DCONFIG_AIDL,,$(L_CFLAGS)))
+LOCAL_CFLAGS += -DCONFIG_MACSEC -DCONFIG_DRIVER_MACSEC_LINUX
+# config macsec to use AIDL interface for CAK key.
+LOCAL_CFLAGS += -DCONFIG_AIDL_MACSEC_PSK_METHODS
+LOCAL_SRC_FILES += ../src/drivers/driver_macsec_linux.c \
+                  ../src/drivers/driver_wired_common.c
+LOCAL_SRC_FILES += wpas_kay.c \
+                   src/pae/ieee802_1x_cp.c \
+                   src/pae/ieee802_1x_kay.c \
+                   src/pae/ieee802_1x_key.c \
+                   src/pae/ieee802_1x_secy_ops.c
+LOCAL_SRC_FILES += src/pae/aidl/aidl_psk.cpp
+LOCAL_SHARED_LIBRARIES += android.hardware.macsec-V1-ndk \
+			  libbinder_ndk
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/aidl
+
+ifdef CONFIG_AP
+LOCAL_SRC_FILES += src/ap/wpa_auth_kay.c
+endif
+LOCAL_MODULE := wpa_supplicant_macsec
+endif
+
 include $(BUILD_EXECUTABLE)
+endef
+
+$(eval $(call wpa_supplicant_gen,))
+$(eval $(call wpa_supplicant_gen, macsec))
 
 ########################
 #
@@ -2049,7 +2090,7 @@ LOCAL_SRC_FILES += \
 endif
 
 LOCAL_SHARED_LIBRARIES := \
-    android.hardware.wifi.supplicant-V2-ndk \
+    android.hardware.wifi.supplicant-V3-ndk \
     android.system.keystore2-V1-ndk \
     libbinder_ndk \
     libbase \
@@ -2060,6 +2101,7 @@ ifeq ($(SUPPLICANT_VENDOR_AIDL), y)
 LOCAL_SHARED_LIBRARIES += \
     vendor.qti.hardware.wifi.supplicant-V1-ndk
 endif
+LOCAL_MIN_SDK_VERSION := 34
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/aidl
 include $(BUILD_STATIC_LIBRARY)
